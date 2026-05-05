@@ -1,0 +1,6 @@
+type nul > index.js
+export default function handler(req, res) {
+  res.status(200).json({ message: "Funcionando 🚀" });
+Todos os arquivos (*.*)
+UTF-8
+}
