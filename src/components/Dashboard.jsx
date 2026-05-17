@@ -12,6 +12,7 @@ import YieldSimulator from './YieldSimulator';
 import ResultCharts from './ResultCharts';
 import StockInsights from './StockInsights';
 import FlowRadar from './FlowRadar';
+import MarketPulse from './MarketPulse';
 import { TrendingUp, Activity, PieChart } from 'lucide-react';
 import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
@@ -391,7 +392,17 @@ const Dashboard = ({ onLogout }) => {
                  <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Monitoramento de sentimento global, eventos econômicos e fluxo de capital em tempo real.</p>
                </div>
             </div>
-            
+
+            {lastAlert && lastAlert !== 'IGNORAR' && (
+              <MarketPulse
+                lastAlert={lastAlert}
+                correlation={correlation}
+                marketRegime={marketRegime}
+                currentWin={winPrice}
+                currentDolar={dolarPrice}
+              />
+            )}
+
             <MarketCharts 
               data={chartData} 
               currentWin={winPrice}
@@ -563,6 +574,38 @@ const Dashboard = ({ onLogout }) => {
           display: grid;
           grid-template-columns: 1.5fr 1fr;
           gap: 1rem;
+        }
+
+        .market-direction-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 1rem 1.25rem;
+          background: rgba(16, 185, 129, 0.08);
+          border: 1px solid rgba(16, 185, 129, 0.18);
+          border-radius: 14px;
+          margin-bottom: 1.5rem;
+        }
+
+        .banner-label {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          letter-spacing: 0.08em;
+          margin-bottom: 0.25rem;
+        }
+
+        .banner-value {
+          font-size: 1.1rem;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .banner-detail {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          opacity: 0.92;
         }
 
         .status-badge {

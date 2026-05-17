@@ -15,11 +15,16 @@ const simulatedNewsPool = [
   "Proposta de ETF de Solana nos EUA ganha força após aprovação histórica dos ETFs de Ether.",
   "Protocolo ONDO lidera ganhos no setor RWA com anúncio de parceria institucional.",
   "Tensão geopolítica aumenta e investidores buscam refúgio em títulos do tesouro americano.",
-  "Dólar global (DXY) se fortalece contra moedas emergentes após dados fortes de varejo nos EUA."
+  "Dólar global (DXY) se fortalece contra moedas emergentes após dados fortes de varejo nos EUA.",
+  "Fitch mantém perspectiva estável para o Brasil após ajustes no crescimento do PIB.",
+  "Mercado de ouro reage à expectativa de nova rodada de cortes de juros nos EUA.",
+  "Fluxo estrangeiro para corretoras brasileiras avança com otimismo no setor de commodities.",
+  "IBOV se aproxima de 135.000 pontos à medida que bancos confirmam resultados sólidos.",
+  "Relatório de inflação dos EUA mostra desaceleração e acende sinal de chance de corte em 2025."
 ];
 
 export const startNewsFeed = (onNewNews) => {
-  // Simulate a news item arriving every 15-30 seconds
+  // Simulate a news item arriving every 20 seconds
   const interval = setInterval(() => {
     const randomIndex = Math.floor(Math.random() * simulatedNewsPool.length);
     const news = simulatedNewsPool[randomIndex];

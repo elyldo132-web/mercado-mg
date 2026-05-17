@@ -18,14 +18,25 @@ const History = ({ history }) => {
                 <span className="item-summary">{alert.summary}</span>
               </div>
               <div className="item-indicators font-mono">
-                <span className={alert.impact.dollar === 'Alta' ? 'text-green' : 'text-red'}>
-                  USD: {alert.impact.dollar === 'Alta' ? '▲' : '▼'}
+                <span className={alert.impact.dollar === 'Alta' ? 'text-green' : alert.impact.dollar === 'Queda' ? 'text-red' : 'text-muted'}>
+                  USD: {alert.impact.dollar}
                 </span>
-                <span className={alert.impact.win === 'Alta' ? 'text-green' : 'text-red'}>
-                  WIN: {alert.impact.win === 'Alta' ? '▲' : '▼'}
+                <span className={alert.impact.win === 'Alta' ? 'text-green' : alert.impact.win === 'Queda' ? 'text-red' : 'text-muted'}>
+                  WIN: {alert.impact.win}
                 </span>
-                <span className="text-muted">| {alert.strength}</span>
+                <span className={alert.marketDirection === 'Alta' ? 'text-green' : alert.marketDirection === 'Queda' ? 'text-red' : 'text-muted'}>
+                  {alert.marketDirection}
+                </span>
+                <span className="text-muted">{alert.confidence}%</span>
               </div>
+              <div className="item-meta">
+                <span className="tag">{alert.sector || 'Macro'}</span>
+                <span className="tag">{alert.timing}</span>
+                <span className={`tag action-tag ${alert.tradeAction === 'Compra' ? 'buy' : alert.tradeAction === 'Venda' ? 'sell' : 'neutral'}`}>{alert.tradeAction}</span>
+              </div>
+              {alert.drivers && alert.drivers.length > 0 && (
+                <div className="item-drivers text-muted">Drivers: {alert.drivers.join(' · ')}</div>
+              )}
             </div>
           ))
         )}
@@ -80,8 +91,36 @@ const History = ({ history }) => {
         .item-summary { font-size: 0.85rem; font-weight: 500; color: var(--text-primary); }
         .item-indicators {
           display: flex;
-          gap: 1rem;
+          flex-wrap: wrap;
+          gap: 0.75rem;
           font-size: 0.7rem;
+          color: var(--text-muted);
+          align-items: center;
+          margin-bottom: 0.5rem;
+        }
+        .item-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .tag {
+          display: inline-flex;
+          padding: 0.25rem 0.55rem;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.12);
+          color: var(--text-muted);
+          font-size: 0.7rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .action-tag.buy { color: var(--accent-green); background: rgba(16, 185, 129, 0.12); }
+        .action-tag.sell { color: var(--accent-red); background: rgba(248, 81, 73, 0.12); }
+        .action-tag.neutral { color: var(--text-muted); }
+        .item-drivers {
+          margin-top: 0.45rem;
+          font-size: 0.72rem;
           color: var(--text-muted);
         }
       `}</style>

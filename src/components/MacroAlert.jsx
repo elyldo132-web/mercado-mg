@@ -1,7 +1,7 @@
 import React from 'react';
 
 const MacroAlert = ({ alert }) => {
-  const { summary, impact, strength, timing, tradeReading } = alert;
+  const { summary, impact, strength, timing, tradeReading, marketDirection, confidence, drivers = [], sector, tradeAction } = alert;
 
   const getImpactColor = (val) => {
     if (val === 'Alta') return 'text-green';
@@ -19,12 +19,23 @@ const MacroAlert = ({ alert }) => {
     <div className="alert-display animate-fade-in glass">
       <div className="alert-header">
         <span className="emoji-pulse">🚨</span>
-        <h2 className="alert-title">ALERTA MACRO</h2>
+        <div>
+          <h2 className="alert-title">ALERTA MACRO</h2>
+          <div className="alert-pill">{sector || 'Macro'}</div>
+        </div>
       </div>
 
       <div className="alert-section summary-section">
         <div className="label">📰 Resumo:</div>
         <div className="content">{summary}</div>
+      </div>
+
+      <div className="alert-section direction-summary">
+        <div className="label">📈 Direção do Mercado:</div>
+        <div className={`value ${marketDirection === 'Alta' ? 'text-green' : marketDirection === 'Queda' ? 'text-red' : 'text-muted'}`}>
+          {marketDirection} · {confidence}%
+        </div>
+        <div className="direction-subtext">{drivers.join(' · ') || 'Baseado em macro e fluxo'}</div>
       </div>
 
       <div className="alert-section grid-impact">
@@ -44,7 +55,7 @@ const MacroAlert = ({ alert }) => {
         </div>
         {impact.crypto !== 'Neutro' && (
           <div className="impact-box full-width">
-            <div className="label">🪙 Crypto {alert.sector ? `(${alert.sector})` : ''}:</div>
+            <div className="label">🪙 Cripto ({sector || 'Crypto'}):</div>
             <div className={`value ${getImpactColor(impact.crypto)}`}>
               {impact.crypto === 'Alta' ? '🚀 ' : impact.crypto === 'Queda' ? '🧨 ' : ''}
               {impact.crypto}
@@ -64,6 +75,13 @@ const MacroAlert = ({ alert }) => {
         </div>
       </div>
 
+      <div className="alert-section trade-action">
+        <div className="label">🧭 Ação Recomendada:</div>
+        <div className={`trade-pill ${tradeAction === 'Compra' ? 'buy' : tradeAction === 'Venda' ? 'sell' : 'neutral'}`}>
+          {tradeAction}
+        </div>
+      </div>
+
       <div className="alert-section reading-section active-instruction">
         <div className="label">🎯 Instrução de Operação:</div>
         <div className="instruction-content font-mono">{tradeReading}</div>
@@ -78,8 +96,8 @@ const MacroAlert = ({ alert }) => {
         }
         .alert-header {
           display: flex;
-          align-items: center;
-          gap: 0.5rem;
+          align-items: flex-start;
+          gap: 0.85rem;
           margin-bottom: 1rem;
         }
         .alert-title {
@@ -87,10 +105,26 @@ const MacroAlert = ({ alert }) => {
           font-weight: 800;
           letter-spacing: 1px;
           color: var(--text-primary);
+          margin: 0;
+        }
+        .alert-pill {
+          margin-top: 0.4rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.35rem 0.75rem;
+          border-radius: 999px;
+          background: rgba(56, 189, 248, 0.12);
+          color: var(--text-primary);
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
         }
         .emoji-pulse {
-          font-size: 1.25rem;
+          font-size: 1.35rem;
           animation: pulse 1s infinite;
+          line-height: 1;
         }
         .alert-section {
           margin-bottom: 1rem;
@@ -106,11 +140,20 @@ const MacroAlert = ({ alert }) => {
           color: var(--text-muted);
           text-transform: uppercase;
           font-weight: 600;
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.45rem;
         }
         .content {
           font-size: 0.95rem;
-          line-height: 1.5;
+          line-height: 1.6;
+        }
+        .direction-summary {
+          padding: 0.75rem 0;
+        }
+        .direction-subtext {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          margin-top: 0.35rem;
+          line-height: 1.4;
         }
         .grid-impact, .flex-details {
           display: grid;
@@ -134,15 +177,31 @@ const MacroAlert = ({ alert }) => {
           font-size: 1.1rem;
           font-weight: 700;
         }
+        .trade-action {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .trade-pill {
+          display: inline-flex;
+          padding: 0.55rem 0.9rem;
+          border-radius: 999px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+        }
+        .trade-pill.buy { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+        .trade-pill.sell { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }
+        .trade-pill.neutral { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
         .reading-section {
-          background: rgba(22, 27, 34, 0.5);
+          background: rgba(22, 27, 34, 0.55);
           padding: 1rem;
           border-radius: 6px;
         }
         .active-instruction {
-          border: 1px solid var(--accent-blue);
+          border: 1px solid rgba(56, 189, 248, 0.32);
           background: rgba(0, 112, 243, 0.1);
-          box-shadow: 0 0 15px rgba(0, 112, 243, 0.1);
+          box-shadow: 0 0 15px rgba(0, 112, 243, 0.08);
           animation: glow 2s infinite;
         }
         .instruction-content {
@@ -153,9 +212,6 @@ const MacroAlert = ({ alert }) => {
         }
         @keyframes glow {
           50% { border-color: rgba(0, 112, 243, 0.6); }
-        }
-        .bg-surface {
-          background-color: var(--bg-secondary);
         }
       `}</style>
     </div>

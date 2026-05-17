@@ -33,6 +33,16 @@ const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, bala
             <span className="text-muted" style={{fontSize: '0.65rem', marginRight: '4px'}}>SALDO:</span> 
             <span className="text-green">${balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
+          <div className="status-item regime-pill-wrapper">
+            <span className="text-muted" style={{fontSize: '0.65rem', marginRight: '4px'}}>REGIME:</span>
+            <span className={`regime-pill ${marketRegime === 'TRENDING' ? 'trending' : marketRegime === 'CORR_ANOMALY' ? 'anomaly' : 'normal'}`}>
+              {marketRegime}
+            </span>
+          </div>
+          <div className="status-item">
+            <span className="text-muted" style={{fontSize: '0.65rem', marginRight: '4px'}}>CORR:</span>
+            <span className={correlation >= 0 ? 'text-green' : 'text-red'}>{correlation?.toFixed(2)}</span>
+          </div>
         </div>
 
         <div className="actions-section">
@@ -135,11 +145,34 @@ const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, bala
         .market-status {
           display: flex;
           align-items: center;
-          gap: 1.25rem;
+          gap: 1rem;
           font-size: 0.75rem;
           flex: 1;
           justify-content: flex-end;
           margin-right: 1.5rem;
+          flex-wrap: wrap;
+        }
+        .regime-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 72px;
+          padding: 0.25rem 0.6rem;
+          border-radius: 999px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .regime-pill.normal { color: var(--text-primary); }
+        .regime-pill.trending { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.25); }
+        .regime-pill.anomaly { color: var(--accent-red); border-color: rgba(248, 81, 73, 0.25); }
+        .status-item {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
         }
         
         .wallet-badge {
