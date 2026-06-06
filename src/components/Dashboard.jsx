@@ -410,6 +410,7 @@ const Dashboard = ({ onLogout }) => {
               activeTicker={activeTicker}
               activePrice={activeTickerPrice}
               positions={positions}
+              lastAlert={lastAlert}
             />
             <div className="layout-grid">
               <div className="left-panel">

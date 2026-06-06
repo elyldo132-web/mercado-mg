@@ -78,7 +78,12 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePrice, positions }) => {
+const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePrice, positions, lastAlert }) => {
+  const suggestedEntryLine = lastAlert && activeTicker && (lastAlert.tradeAction === 'Compra' || lastAlert.tradeAction === 'Venda')
+    ? activePrice
+    : null;
+  const suggestedLineColor = lastAlert?.tradeAction === 'Compra' ? 'var(--accent-green)' : 'var(--accent-red)';
+  const suggestedLineLabel = lastAlert?.tradeAction ? `${lastAlert.tradeAction} sugerida` : '';
   
   const calculateChange = (key) => {
     if (data.length < 2) return 0;
@@ -111,13 +116,13 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
     // Generate fake OHLC based on 'win' and 'dolar'
     const winOpen = prevItem.win;
     const winClose = item.win;
-    const winHigh = Math.max(winOpen, winClose) + Math.random() * 150;
-    const winLow = Math.min(winOpen, winClose) - Math.random() * 150;
+    const winHigh = Math.max(winOpen, winClose) + 70;
+    const winLow = Math.min(winOpen, winClose) - 70;
     
     const dolarOpen = prevItem.dolar;
     const dolarClose = item.dolar;
-    const dolarHigh = Math.max(dolarOpen, dolarClose) + Math.random() * 0.015;
-    const dolarLow = Math.min(dolarOpen, dolarClose) - Math.random() * 0.015;
+    const dolarHigh = Math.max(dolarOpen, dolarClose) + 0.0075;
+    const dolarLow = Math.min(dolarOpen, dolarClose) - 0.0075;
 
     // We store an array [min, max] for the Bar component to draw the body correctly
     return {
@@ -318,7 +323,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                   />
                   {positions?.filter(p => p.ticker === activeTicker).map((pos, idx) => (
                     <ReferenceLine 
-                      key={idx}
+                      key={`pos-${idx}`}
                       y={pos.entryPrice} 
                       yAxisId="0" 
                       stroke={pos.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'} 
@@ -326,6 +331,14 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                       label={{ value: `Entry: ${pos.entryPrice.toFixed(2)}`, position: 'right', fill: '#fff', fontSize: 8 }}
                     />
                   ))}
+                  {suggestedEntryLine && (
+                    <ReferenceLine
+                      y={suggestedEntryLine}
+                      stroke={suggestedLineColor}
+                      strokeDasharray="4 4"
+                      label={{ value: suggestedLineLabel, position: 'right', fill: suggestedLineColor, fontSize: 10 }}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>

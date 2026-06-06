@@ -47,6 +47,43 @@ http://localhost:5173
 MG-ALPHA-2026
 ```
 
+## Publicação
+
+Para publicar o site em produção, gere os arquivos estáticos e use a pasta de saída:
+
+- Para hosts estáticos comuns: publique a pasta `dist`
+- Para GitHub Pages use:
+
+```bash
+npm run build:docs
+```
+
+Em seguida, configure o GitHub Pages para usar a pasta `docs` como diretório de publicação.
+
+### Deploy automático no GitHub Pages
+
+Há um workflow de GitHub Actions em `.github/workflows/deploy-github-pages.yml` que:
+
+- instala dependências
+- executa `npm run build`
+- publica o conteúdo de `dist` em `gh-pages`
+
+Basta enviar (push) para a branch `main`; o GitHub Pages pode ser configurado para servir a branch `gh-pages`.
+
+### Deploy manual com npm
+
+Para publicar manualmente sem GitHub Actions, use:
+
+```bash
+npm run deploy
+```
+
+Isso cria ou atualiza a branch `gh-pages` com o conteúdo de `dist`.
+
+```text
+MG-ALPHA-2026
+```
+
 ## Como o motor de análise funciona
 
 A análise está em `src/utils/MacroRules.js` e funciona assim:

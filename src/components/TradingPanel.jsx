@@ -1,19 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 
 const TradingPanel = ({ balance, positions, activeTicker, activePrice, onTrade, suggestion }) => {
   const currentPosition = positions.find(p => p.ticker === activeTicker);
-  const [tradeLog, setTradeLog] = useState([]);
-
-  useEffect(() => {
-    if (positions.length > 0) {
-      const last = positions[positions.length - 1];
-      setTradeLog(prev => [{
-        id: Date.now(),
-        msg: `ORDEM EXECUTADA: ${last.type === 'BUY' ? 'COMPRA' : 'VENDA'} ${last.ticker} @ ${last.entryPrice.toFixed(2)}`,
+  const tradeLog = useMemo(() => {
+    return positions
+      .slice(-5)
+      .reverse()
+      .map(pos => ({
+        id: `${pos.ticker}-${pos.timestamp}`,
+        msg: `ORDEM EXECUTADA: ${pos.type === 'BUY' ? 'COMPRA' : 'VENDA'} ${pos.ticker} @ ${pos.entryPrice.toFixed(2)}`,
         type: 'exec'
-      }, ...prev].slice(0, 5));
-    }
-  }, [positions.length]);
+      }));
+  }, [positions]);
 
   return (
     <div className="trading-panel glass animate-fade-in">

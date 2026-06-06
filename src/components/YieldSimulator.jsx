@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { DollarSign, Percent, Calendar, PlusCircle } from 'lucide-react';
 
 const YieldSimulator = ({ 
@@ -14,75 +14,56 @@ const YieldSimulator = ({
   years, 
   setYears 
 }) => {
-  const [results, setResults] = useState({ totalValue: 0, monthlyDividend: 0 });
-
-  const calculateResults = useCallback(() => {
+  const yearlyData = useMemo(() => {
     let total = initialInvestment;
     const monthlyYieldRate = expectedYield / 100 / 12;
     const monthlyGrowthRate = expectedGrowth / 100 / 12;
     const totalMonths = years * 12;
-    
-    const yearlyData = [];
+    const result = [];
     let cumulativeDivs = 0;
 
     for (let m = 0; m <= totalMonths; m++) {
-        if (m > 0) {
-            const monthlyDiv = total * monthlyYieldRate;
-            cumulativeDivs += monthlyDiv;
-            total = total * (1 + monthlyGrowthRate);
-            total += monthlyContribution;
-            total += monthlyDiv;
-        }
+      if (m > 0) {
+        const monthlyDiv = total * monthlyYieldRate;
+        cumulativeDivs += monthlyDiv;
+        total = total * (1 + monthlyGrowthRate);
+        total += monthlyContribution;
+        total += monthlyDiv;
+      }
 
-        if (m % 12 === 0) {
-            yearlyData.push({
-                year: `Ano ${m / 12}`,
-                totalValue: Math.round(total),
-                cumulativeDividends: Math.round(cumulativeDivs)
-            });
-        }
+      if (m % 12 === 0) {
+        result.push({
+          year: `Ano ${m / 12}`,
+          totalValue: Math.round(total),
+          cumulativeDividends: Math.round(cumulativeDivs)
+        });
+      }
     }
 
-    const yearlyDividend = total * (expectedYield / 100);
-    setResults({
-      totalValue: total,
-      monthlyDividend: yearlyDividend / 12
-    });
-
-    if (onUpdate) {
-        onUpdate(yearlyData);
-    }
-  }, [initialInvestment, monthlyContribution, expectedYield, expectedGrowth, years, onUpdate]);
-
-  useEffect(() => {
-    calculateResults();
-  }, [calculateResults]);
-
-  useEffect(() => {
-    const pulse = setInterval(() => {
-      setResults(prev => ({
-        ...prev,
-        pulseValue: (prev.totalValue * (1 + (Math.random() * 0.001 - 0.0005))),
-        pulseDividend: (prev.monthlyDividend * (1 + (Math.random() * 0.002 - 0.001)))
-      }));
-    }, 5000);
-
-    return () => clearInterval(pulse);
-  }, []);
-
-  const [injectFlash, setInjectFlash] = useState(false);
-
-  useEffect(() => {
-    setInjectFlash(true);
-    const timer = setTimeout(() => setInjectFlash(false), 1000);
-    return () => clearTimeout(timer);
+    return result;
   }, [initialInvestment, monthlyContribution, expectedYield, expectedGrowth, years]);
+
+  useEffect(() => {
+    if (onUpdate) {
+      onUpdate(yearlyData);
+    }
+  }, [onUpdate, yearlyData]);
+
+  const results = useMemo(() => {
+    const final = yearlyData[yearlyData.length - 1] || { totalValue: 0, cumulativeDividends: 0 };
+    const yearlyDividend = final.totalValue * (expectedYield / 100);
+
+    return {
+      totalValue: final.totalValue,
+      monthlyDividend: yearlyDividend / 12
+    };
+  }, [yearlyData, expectedYield]);
 
   const formatCurrency = (val) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
-    <div id="estrategia" className={`glass-panel ${injectFlash ? 'pulse-border' : ''}`} style={{ padding: '2rem', height: 'fit-content', transition: 'border-color 0.3s' }}>
+    <div id="estrategia" className="glass-panel" style={{ padding: '2rem', height: 'fit-content', transition: 'border-color 0.3s' }}>
       <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <PlusCircle size={24} color="#10b981" />
         Simulação de Independência
