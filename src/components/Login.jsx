@@ -31,7 +31,7 @@ const Login = ({ onAccess }) => {
         <div className="portal-header">
           <div className="portal-logo">🚨</div>
           <h2 className="portal-title">Mercado MG</h2>
-          <p className="portal-subtitle">Private Terminal Access</p>
+          <p className="portal-subtitle">Acesso Privado ao Terminal</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -39,7 +39,7 @@ const Login = ({ onAccess }) => {
             <input
               type="text"
               className={`access-input ${error ? 'text-red' : ''}`}
-              placeholder="ENTER ACCESS KEY"
+              placeholder="DIGITE A CHAVE DE ACESSO"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               disabled={isAuthenticating}
@@ -52,13 +52,13 @@ const Login = ({ onAccess }) => {
             className="btn-terminal"
             disabled={isAuthenticating || !key.trim()}
           >
-            {isAuthenticating ? 'Authenticating...' : 'Connect to Terminal'}
+            {isAuthenticating ? 'Autenticando...' : 'Conectar ao Terminal'}
           </button>
         </form>
 
         {error && (
           <div className="auth-error text-red font-mono animate-fade-in" style={{ marginTop: '1rem', fontSize: '0.7rem' }}>
-            ACCESS DENIED: INVALID KEY
+            ACESSO NEGADO: CHAVE INVÁLIDA
           </div>
         )}
 

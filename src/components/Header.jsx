@@ -1,6 +1,12 @@
 import React from 'react';
 
 const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, balance, view, setView }) => {
+  const navTabs = [
+    { id: 'market',        label: 'Macro Análise',        icon: '🌍', color: '#58a6ff' },
+    { id: 'opportunities', label: 'Oportunidades',         icon: '⚡', color: '#a855f7' },
+    { id: 'simulator',     label: 'Simulador',             icon: '📈', color: '#10b981' },
+  ];
+
   return (
     <header className="app-header glass">
       <div className="header-container">
@@ -10,27 +16,23 @@ const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, bala
         </div>
 
         <nav className="main-navigation">
-          <button 
-            className={`nav-tab ${view === 'market' ? 'active' : ''}`} 
-            onClick={() => setView('market')}
-          >
-            <span className="tab-icon">🌍</span>
-            Macro Análise
-            {view === 'market' && <div className="active-indicator"></div>}
-          </button>
-          <button 
-            className={`nav-tab ${view === 'simulator' ? 'active' : ''}`} 
-            onClick={() => setView('simulator')}
-          >
-            <span className="tab-icon">📈</span>
-            Simulador de Crescimento
-            {view === 'simulator' && <div className="active-indicator"></div>}
-          </button>
+          {navTabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`nav-tab ${view === tab.id ? 'active' : ''}`}
+              style={{ '--tab-color': tab.color }}
+              onClick={() => setView(tab.id)}
+            >
+              <span className="tab-icon">{tab.icon}</span>
+              {tab.label}
+              {view === tab.id && <div className="active-indicator" style={{ background: tab.color, boxShadow: `0 -2px 10px ${tab.color}88` }}></div>}
+            </button>
+          ))}
         </nav>
 
         <div className="market-status font-mono">
           <div className="status-item wallet-badge">
-            <span className="text-muted" style={{fontSize: '0.65rem', marginRight: '4px'}}>SALDO:</span> 
+            <span className="text-muted" style={{fontSize: '0.65rem', marginRight: '4px'}}>SALDO:</span>
             <span className="text-green">${balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="status-item regime-pill-wrapper">
@@ -46,11 +48,12 @@ const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, bala
         </div>
 
         <div className="actions-section">
-          <button 
-            className={`audio-toggle ${isMuted ? 'muted' : 'active'}`} 
+          <div className="hotkey-note">Atalhos: M · O · S · T</div>
+          <button
+            className={`audio-toggle ${isMuted ? 'muted' : 'active'}`}
             onClick={toggleMute}
             title={isMuted ? "Ativar Alertas Sonoros" : "Mutar Alertas"}
-            style={{ marginRight: '1rem' }}
+            aria-pressed={!isMuted}
           >
             {isMuted ? '🔇' : '🔊'}
           </button>
@@ -60,176 +63,211 @@ const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, bala
           </button>
         </div>
       </div>
+
       <style jsx="true">{`
         .app-header {
           padding: 0;
           border-bottom: 1px solid var(--border-color);
-          background: rgba(10, 12, 16, 0.85);
-          backdrop-filter: blur(12px);
+          background: rgba(8, 10, 15, 0.92);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
           position: sticky;
           top: 0;
           z-index: 100;
         }
+
         .header-container {
           max-width: 1400px;
           margin: 0 auto;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0 2rem;
+          padding: 0 1.5rem;
           height: 64px;
+          gap: 1rem;
         }
+
         .logo-section {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
-          flex: 1;
+          gap: 0.6rem;
+          flex-shrink: 0;
         }
+
         .app-title {
-          font-size: 1.15rem;
-          font-weight: 700;
+          font-size: 1.1rem;
+          font-weight: 800;
           letter-spacing: -0.5px;
           text-transform: uppercase;
           margin: 0;
+          white-space: nowrap;
         }
-        
+
         .main-navigation {
           display: flex;
           height: 100%;
-          gap: 2rem;
-          flex: 2;
+          gap: 0.25rem;
+          flex: 1;
           justify-content: center;
+          max-width: 520px;
         }
-        
+
         .nav-tab {
           background: transparent;
           border: none;
           color: var(--text-muted);
-          font-size: 0.95rem;
+          font-size: 0.85rem;
           font-weight: 600;
-          padding: 0 1rem;
+          padding: 0 0.85rem;
           cursor: pointer;
           position: relative;
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          transition: color 0.3s ease;
+          gap: 0.4rem;
+          transition: all 0.25s ease;
           height: 100%;
+          border-radius: 0;
+          white-space: nowrap;
         }
-        
+
         .nav-tab:hover {
           color: var(--text-primary);
+          background: rgba(255,255,255,0.04);
         }
-        
+
         .nav-tab.active {
-          color: white;
+          color: var(--tab-color, white);
+          background: color-mix(in srgb, var(--tab-color, #ffffff) 8%, transparent);
         }
-        
+
         .active-indicator {
           position: absolute;
           bottom: 0;
           left: 0;
           width: 100%;
-          height: 3px;
-          background: var(--accent-blue);
-          border-radius: 3px 3px 0 0;
-          box-shadow: 0 -2px 10px rgba(0, 112, 243, 0.5);
-          animation: slideUp 0.3s ease forwards;
+          height: 2px;
+          border-radius: 2px 2px 0 0;
+          animation: slideUp 0.25s ease forwards;
         }
 
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
-        
+
+        .tab-icon { font-size: 1rem; }
+
         .market-status {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: 0.75rem;
           font-size: 0.75rem;
-          flex: 1;
-          justify-content: flex-end;
-          margin-right: 1.5rem;
-          flex-wrap: wrap;
+          flex-shrink: 0;
+          flex-wrap: nowrap;
         }
+
         .regime-pill {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           min-width: 72px;
-          padding: 0.25rem 0.6rem;
+          padding: 0.2rem 0.55rem;
           border-radius: 999px;
-          font-size: 0.7rem;
-          font-weight: 700;
+          font-size: 0.65rem;
+          font-weight: 800;
           letter-spacing: 0.05em;
           text-transform: uppercase;
           border: 1px solid rgba(148, 163, 184, 0.2);
           background: rgba(255, 255, 255, 0.04);
         }
-        .regime-pill.normal { color: var(--text-primary); }
-        .regime-pill.trending { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.25); }
-        .regime-pill.anomaly { color: var(--accent-red); border-color: rgba(248, 81, 73, 0.25); }
-        .status-item {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-        }
-        
+
+        .regime-pill.normal  { color: var(--text-primary); }
+        .regime-pill.trending { color: #00ff88; border-color: rgba(0,255,136,0.3); box-shadow: 0 0 8px rgba(0,255,136,0.2); }
+        .regime-pill.anomaly  { color: #ff3355; border-color: rgba(255,51,85,0.3);  box-shadow: 0 0 8px rgba(255,51,85,0.2); }
+
+        .status-item { display: flex; align-items: center; gap: 0.35rem; }
+
         .wallet-badge {
-          background: rgba(16, 185, 129, 0.1);
-          padding: 4px 12px;
+          background: rgba(0,255,136,0.08);
+          padding: 4px 10px;
           border-radius: 8px;
-          border: 1px solid rgba(16, 185, 129, 0.2);
+          border: 1px solid rgba(0,255,136,0.2);
           font-weight: 800;
-          display: flex;
-          align-items: center;
         }
-        
+
         .actions-section {
           display: flex;
           align-items: center;
+          gap: 0.6rem;
+          flex-shrink: 0;
         }
+
+        .hotkey-note {
+          color: var(--text-muted);
+          font-size: 0.65rem;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          white-space: nowrap;
+          opacity: 0.7;
+        }
+
         .audio-toggle {
-          background: none;
-          border: 1px solid var(--border-color);
-          padding: 4px 8px;
-          border-radius: 6px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 5px 8px;
+          border-radius: 8px;
           cursor: pointer;
           font-size: 1rem;
           transition: all 0.2s;
+          line-height: 1;
         }
+
         .audio-toggle:hover {
-          background: rgba(255,255,255,0.05);
+          background: rgba(255,255,255,0.08);
           border-color: var(--text-secondary);
         }
+
         .audio-toggle.active {
-          border-color: var(--accent-blue);
-          box-shadow: 0 0 10px rgba(0, 112, 243, 0.2);
+          border-color: rgba(88,166,255,0.5);
+          background: rgba(88,166,255,0.08);
+          box-shadow: 0 0 12px rgba(88,166,255,0.2);
         }
+
         .btn-logout {
-          background: rgba(248, 81, 73, 0.1);
-          color: var(--accent-red);
-          border: 1px solid rgba(248, 81, 73, 0.3);
+          background: rgba(255,51,85,0.08);
+          color: #ff3355;
+          border: 1px solid rgba(255,51,85,0.3);
           padding: 6px 12px;
-          border-radius: 6px;
+          border-radius: 8px;
           font-size: 0.65rem;
-          font-weight: 700;
+          font-weight: 800;
           text-transform: uppercase;
           letter-spacing: 0.5px;
           cursor: pointer;
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
           transition: all 0.2s;
+          white-space: nowrap;
         }
+
         .btn-logout:hover {
-          background: var(--accent-red);
+          background: #ff3355;
           color: white;
+          box-shadow: 0 0 15px rgba(255,51,85,0.35);
+          transform: translateY(-1px);
         }
-        @media (max-width: 900px) {
-          .main-navigation { gap: 1rem; }
-          .nav-tab { font-size: 0.8rem; }
+
+        @media (max-width: 1024px) {
+          .hotkey-note { display: none; }
+          .market-status { gap: 0.5rem; }
+        }
+
+        @media (max-width: 768px) {
+          .main-navigation { gap: 0; max-width: none; }
+          .nav-tab { font-size: 0.75rem; padding: 0 0.6rem; }
           .market-status { display: none; }
+          .header-container { padding: 0 1rem; }
         }
       `}</style>
     </header>

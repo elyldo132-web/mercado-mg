@@ -1,36 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-primary: #0a0c10;
-  --bg-secondary: #0d1117;
-  --surface: #161b22;
-  --surface-hover: #1c2128;
-  --border-color: #30363d;
+  --bg-primary: #07090e;
+  --bg-secondary: #0b0e16;
+  --surface: #111520;
+  --surface-hover: #181d2b;
+  --border-color: #1e2535;
   --border-active: #58a6ff;
-  
-  --text-primary: #f0f6fc;
-  --text-secondary: #8b949e;
-  --text-muted: #6e7681;
 
-  --accent-blue: #58a6ff;
-  --accent-green: #3fb950;
-  --accent-red: #f85149;
-  --accent-gold: #d29922;
+  --text-primary: #eef2fc;
+  --text-secondary: #8892a4;
+  --text-muted: #576070;
+
+  --accent-blue: #4fa8ff;
+  --accent-green: #00ff88;
+  --accent-red: #ff3355;
+  --accent-gold: #fbbf24;
+  --accent-purple: #a855f7;
+  --accent-cyan: #06b6d4;
+  --accent-orange: #f97316;
 
   --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --shadow-sm: 0 1px 0 rgba(0,0,0,0.1);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
-  --glow-green: 0 0 15px rgba(63, 185, 80, 0.2);
-  --glow-red: 0 0 15px rgba(248, 81, 73, 0.2);
+  --shadow-sm: 0 1px 0 rgba(0,0,0,0.15);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+  --glow-green:  0 0 20px rgba(0,255,136,0.25);
+  --glow-red:    0 0 20px rgba(255,51,85,0.25);
+  --glow-blue:   0 0 20px rgba(79,168,255,0.25);
+  --glow-purple: 0 0 20px rgba(168,85,247,0.25);
 
   /* Yield Growth Integration Variables */
   --primary: #10b981;
   --primary-glow: rgba(16, 185, 129, 0.2);
   --secondary: #34d399;
   --accent: #60a5fa;
-  --text-main: #f0f6fc;
+  --text-main: #eef2fc;
 }
 
 * {
@@ -80,11 +86,147 @@ body {
 
 /* Glassmorphism Classes */
 .glass {
-  background: rgba(22, 27, 34, 0.3);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(17, 21, 32, 0.5);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-color);
 }
+
+/* ============================================================
+   SISTEMA DE BOTÕES VIBRANTES
+   ============================================================ */
+
+/* Base button reset */
+button { font-family: var(--font-main); }
+
+/* Botão Primário — Gradiente Azul/Roxo */
+.btn-primary-vib {
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4fa8ff, #7c3aed);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  box-shadow: 0 0 18px rgba(79,168,255,0.35), 0 0 35px rgba(124,58,237,0.2);
+}
+.btn-primary-vib:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 28px rgba(79,168,255,0.55), 0 0 55px rgba(124,58,237,0.35);
+  filter: brightness(1.1);
+}
+.btn-primary-vib:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Botão Compra — Verde Neon */
+.btn-buy-vib {
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #00ff88, #10b981);
+  color: #050a05;
+  font-weight: 900;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  box-shadow: 0 0 18px rgba(0,255,136,0.4);
+}
+.btn-buy-vib:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(0,255,136,0.65);
+}
+.btn-buy-vib:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Botão Venda — Vermelho Neon */
+.btn-sell-vib {
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ff3355, #dc2626);
+  color: #fff;
+  font-weight: 900;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  box-shadow: 0 0 18px rgba(255,51,85,0.4);
+}
+.btn-sell-vib:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(255,51,85,0.65);
+}
+.btn-sell-vib:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Botão Scan — Gradiente Roxo/Azul */
+.btn-scan-vib {
+  padding: 0.7rem 1.4rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #2563eb, #0891b2);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  box-shadow: 0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(37,99,235,0.2);
+}
+.btn-scan-vib:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 35px rgba(124,58,237,0.65), 0 0 60px rgba(37,99,235,0.35);
+  filter: brightness(1.1);
+}
+.btn-scan-vib:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Botão Ghost — Borda luminosa */
+.btn-ghost-vib {
+  padding: 0.6rem 1.2rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-ghost-vib:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+.btn-ghost-vib:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Pill filter buttons */
+.btn-pill {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.btn-pill:hover { background: rgba(255,255,255,0.09); color: var(--text-primary); transform: translateY(-1px); }
+.btn-pill.active-blue   { background: rgba(79,168,255,0.15);  border-color: rgba(79,168,255,0.4);  color: #4fa8ff;  box-shadow: 0 0 12px rgba(79,168,255,0.2); }
+.btn-pill.active-green  { background: rgba(0,255,136,0.12);   border-color: rgba(0,255,136,0.4);   color: #00ff88;  box-shadow: 0 0 12px rgba(0,255,136,0.2); }
+.btn-pill.active-purple { background: rgba(168,85,247,0.15);  border-color: rgba(168,85,247,0.4);  color: #a855f7;  box-shadow: 0 0 12px rgba(168,85,247,0.2); }
+.btn-pill.active-orange { background: rgba(249,115,22,0.15);  border-color: rgba(249,115,22,0.4);  color: #f97316;  box-shadow: 0 0 12px rgba(249,115,22,0.2); }
+.btn-pill.active-cyan   { background: rgba(6,182,212,0.12);   border-color: rgba(6,182,212,0.4);   color: #06b6d4;  box-shadow: 0 0 12px rgba(6,182,212,0.2); }
+.btn-pill.active-gold   { background: rgba(251,191,36,0.12);  border-color: rgba(251,191,36,0.4);  color: #fbbf24;  box-shadow: 0 0 12px rgba(251,191,36,0.2); }
+
+/* ============================================================ */
 
 /* Animations */
 @keyframes fadeIn {

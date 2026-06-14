@@ -3,7 +3,6 @@ import Header from './Header';
 import NewsInput from './NewsInput';
 import MacroAlert from './MacroAlert';
 import History from './History';
-import MarketCharts from './MarketCharts';
 import EconomicCalendar from './EconomicCalendar';
 import CryptoScanner from './CryptoScanner';
 import SentimentHeatmap from './SentimentHeatmap';
@@ -13,9 +12,15 @@ import ResultCharts from './ResultCharts';
 import StockInsights from './StockInsights';
 import FlowRadar from './FlowRadar';
 import MarketPulse from './MarketPulse';
-import { TrendingUp, Activity, PieChart } from 'lucide-react';
+import OpportunityScanner from './OpportunityScanner';
+import WinAnalysis from './WinAnalysis';
+import TradingViewCharts from './TradingViewCharts';
+import RiskCalculator from './RiskCalculator';
+import SignalPanel from './SignalPanel';
+import { TrendingUp, Activity, PieChart, Zap } from 'lucide-react';
 import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
+import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
 
 const Dashboard = ({ onLogout }) => {
   const [news, setNews] = useState('');
@@ -48,7 +53,51 @@ const Dashboard = ({ onLogout }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [correlation, setCorrelation] = useState(-0.85); // Padrão inverso
   const [marketRegime, setMarketRegime] = useState('NORMAL');
-  
+  const [toast, setToast] = useState(null);
+  const [macroSignal, setMacroSignal] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      showToast(next ? 'Alertas sonoros mutados' : 'Alertas sonoros ativados', 'success');
+      return next;
+    });
+  }, [showToast]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'm') {
+        setView('market');
+        showToast('Visão Macro ativada (M)', 'info');
+      }
+      if (key === 's') {
+        setView('simulator');
+        showToast('Visão Simulador ativada (S)', 'info');
+      }
+      if (key === 'o') {
+        setView('opportunities');
+        showToast('Buscador de Oportunidades ativado (O)', 'info');
+      }
+      if (key === 't') {
+        toggleMute();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showToast, toggleMute]);
+
   // Trading State
   const [balance, setBalance] = useState(() => {
     const saved = localStorage.getItem('mercado_mg_balance');
@@ -58,6 +107,9 @@ const Dashboard = ({ onLogout }) => {
     const saved = localStorage.getItem('mercado_mg_positions');
     return saved ? JSON.parse(saved) : [];
   });
+
+  const [liveFeedSource, setLiveFeedSource] = useState('Simulado');
+  const [macroSnapshot, setMacroSnapshot] = useState({ rateUSD: null, rateBRL: null, btcPrice: null, source: 'Local' });
 
   // Unified View State
   const [view, setView] = useState('market');
@@ -93,6 +145,24 @@ const Dashboard = ({ onLogout }) => {
     localStorage.setItem('yg_growth', expectedGrowth.toString());
     localStorage.setItem('yg_years', years.toString());
   }, [initialInvestment, monthlyContribution, expectedYield, expectedGrowth, years]);
+
+  useEffect(() => {
+    const loadMacroData = async () => {
+      try {
+        const [fx, btc] = await Promise.all([fetchExchangeRates(), fetchBitcoinPrice()]);
+        setMacroSnapshot({
+          rateUSD: fx.value,
+          rateBRL: fx.values?.BRL,
+          btcPrice: btc.value,
+          source: fx.source
+        });
+      } catch (error) {
+        console.warn('Erro ao carregar macro snapshot:', error);
+      }
+    };
+
+    loadMacroData();
+  }, []);
 
   const handleInjectAsset = (asset) => {
     setExpectedYield(asset.yield);
@@ -255,6 +325,7 @@ const Dashboard = ({ onLogout }) => {
   useEffect(() => {
     // Iniciar feed automático
     const stopFeed = startNewsFeed((incomingNews) => {
+      setLiveFeedSource(incomingNews.source || 'Simulado');
       const result = analyzeNews(incomingNews.text);
       if (result !== 'IGNORAR') {
         processNewAlert(result, incomingNews.time);
@@ -314,7 +385,10 @@ const Dashboard = ({ onLogout }) => {
   }, [activeTicker]);
 
   const handleAnalyze = () => {
-    if (!news.trim()) return;
+    if (!news.trim()) {
+      showToast('Digite uma notícia para análise', 'warning');
+      return;
+    }
     
     const tickerMatch = detectTicker(news);
     if (tickerMatch) {
@@ -327,13 +401,28 @@ const Dashboard = ({ onLogout }) => {
     
     if (result !== 'IGNORAR') {
       processNewAlert(result);
+      showToast('Análise concluída e alertas atualizados', 'success');
+    } else {
+      showToast('Notícia ignorada pelo terminal', 'info');
     }
+  };
+
+  const handleSelectCrypto = (ticker, price) => {
+    setActiveTicker(ticker);
+    setActiveTickerPrice(price);
+    setTimeout(() => {
+      document.querySelector('.trading-panel')?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+    showToast(`Ativo ${ticker} selecionado`, 'success');
   };
 
   const handleTrade = (type) => {
     if (type === 'CLOSE') {
       const pos = positions.find(p => p.ticker === activeTicker);
-      if (!pos) return;
+      if (!pos) {
+        showToast('Nenhuma posição ativa para fechar', 'warning');
+        return;
+      }
       
       const profit = (pos.pl / 100) * 1000; // Simulating $1000 lot size
       const newBalance = balance + profit;
@@ -344,6 +433,12 @@ const Dashboard = ({ onLogout }) => {
       
       localStorage.setItem('mercado_mg_balance', newBalance.toString());
       localStorage.setItem('mercado_mg_positions', JSON.stringify(updatedPositions));
+      showToast(`Posição ${activeTicker} fechada`, 'success');
+      return;
+    }
+
+    if (!activeTicker) {
+      showToast('Selecione um ativo antes de operar', 'warning');
       return;
     }
 
@@ -359,13 +454,14 @@ const Dashboard = ({ onLogout }) => {
     const updatedPositions = [...positions, newPosition];
     setPositions(updatedPositions);
     localStorage.setItem('mercado_mg_positions', JSON.stringify(updatedPositions));
+    showToast(`${type === 'BUY' ? 'Compra' : 'Venda'} em ${activeTicker} registrada`, 'success');
   };
 
   return (
     <div className={`dashboard regime-${marketRegime.toLowerCase()}`}>
       <Header 
         isMuted={isMuted} 
-        toggleMute={() => setIsMuted(!isMuted)} 
+        toggleMute={toggleMute} 
         correlation={correlation}
         marketRegime={marketRegime}
         onLogout={onLogout}
@@ -373,6 +469,11 @@ const Dashboard = ({ onLogout }) => {
         view={view}
         setView={setView}
       />
+      {toast && (
+        <div className={`toast-notification ${toast.type}`} role="status" aria-live="polite">
+          {toast.message}
+        </div>
+      )}
       {view === 'market' && (
         <div className="globe-bg animate-fade-in">
           <img src="/fundo.jpg" alt="Background" />
@@ -383,14 +484,36 @@ const Dashboard = ({ onLogout }) => {
       <main className="main-content container relative-z">
         {view === 'market' ? (
           <div className="market-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
-            <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-               <div style={{ padding: '0.75rem', background: 'rgba(88, 166, 255, 0.1)', borderRadius: '12px', color: 'var(--accent-blue)' }}>
-                 <Activity size={28} />
-               </div>
-               <div>
-                 <h2 style={{ fontSize: '1.6rem', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>Terminal de Macro Análise</h2>
-                 <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Monitoramento de sentimento global, eventos econômicos e fluxo de capital em tempo real.</p>
-               </div>
+            <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ padding: '0.75rem', background: 'rgba(88, 166, 255, 0.1)', borderRadius: '12px', color: 'var(--accent-blue)' }}>
+                  <Activity size={28} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.6rem', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>Terminal de Macro Análise</h2>
+                  <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Monitoramento de sentimento global, eventos econômicos e fluxo de capital em tempo real.</p>
+                </div>
+              </div>
+              <div className="live-feed-banner">
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                    padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700,
+                    background: liveFeedSource === 'Feed Simulado' ? 'rgba(251,191,36,0.12)' : 'rgba(0,255,136,0.10)',
+                    border: `1px solid ${liveFeedSource === 'Feed Simulado' ? 'rgba(251,191,36,0.35)' : 'rgba(0,255,136,0.35)'}`,
+                    color: liveFeedSource === 'Feed Simulado' ? '#fbbf24' : '#00ff88',
+                  }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 2s infinite' }}></span>
+                  {liveFeedSource === 'Feed Simulado' ? 'SIMULADO' : 'AO VIVO'}
+                </span>
+                <strong style={{ fontSize: '0.8rem' }}>{liveFeedSource}</strong>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Atualiza a cada 25s</span>
+              </div>
+              <div className="market-data-banner">
+                <span>USD/BRL: <strong>{macroSnapshot.rateUSD ? macroSnapshot.rateUSD.toFixed(4) : '--'}</strong></span>
+                <span>BITCOIN: <strong>{macroSnapshot.btcPrice ? `$${macroSnapshot.btcPrice.toFixed(2)}` : '--'}</strong></span>
+                <span>Fonte: <strong>{macroSnapshot.source}</strong></span>
+              </div>
             </div>
 
             {lastAlert && lastAlert !== 'IGNORAR' && (
@@ -403,15 +526,11 @@ const Dashboard = ({ onLogout }) => {
               />
             )}
 
-            <MarketCharts 
-              data={chartData} 
-              currentWin={winPrice}
-              currentDolar={dolarPrice}
-              activeTicker={activeTicker}
-              activePrice={activeTickerPrice}
-              positions={positions}
-              lastAlert={lastAlert}
-            />
+            <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} />
+
+            <SignalPanel macroSignal={macroSignal} lastAlert={lastAlert} />
+
+            <TradingViewCharts />
             <div className="layout-grid">
               <div className="left-panel">
                 <NewsInput 
@@ -436,14 +555,19 @@ const Dashboard = ({ onLogout }) => {
                   onTrade={handleTrade}
                   suggestion={lastAlert?.tradeReading}
                 />
-                <CryptoScanner lastAlert={lastAlert} />
+                <RiskCalculator />
+                <CryptoScanner
+                  lastAlert={lastAlert}
+                  activeTicker={activeTicker}
+                  onSelectCrypto={handleSelectCrypto}
+                />
               </div>
               <div className="right-panel">
                 <History history={history} />
               </div>
             </div>
           </div>
-        ) : (
+        ) : view === 'simulator' ? (
           <div className="simulation-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
             <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
@@ -514,7 +638,20 @@ const Dashboard = ({ onLogout }) => {
             </div>
             <StockInsights onInject={handleInjectAsset} />
           </div>
-        )}
+        ) : view === 'opportunities' ? (
+          <div className="opportunities-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
+            <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+              <div style={{ padding: '0.75rem', background: 'rgba(124,58,237,0.12)', borderRadius: '12px', color: '#a855f7' }}>
+                <Zap size={28} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.6rem', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>Buscador de Oportunidades</h2>
+                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Varredura em tempo real de todas as moedas, criptos, ações e commodities do mercado global.</p>
+              </div>
+            </div>
+            <OpportunityScanner />
+          </div>
+        ) : null}
       </main>
 
       <style jsx="true">{`
@@ -625,10 +762,66 @@ const Dashboard = ({ onLogout }) => {
           border: 1px dashed var(--border-color);
         }
 
+        .live-feed-banner,
+        .market-data-banner {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          align-items: center;
+          border-radius: 12px;
+          padding: 0.85rem 1rem;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(148, 163, 184, 0.12);
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+
+        .live-feed-banner strong,
+        .market-data-banner strong {
+          color: var(--text-primary);
+        }
+
+        .market-data-banner {
+          justify-content: flex-start;
+          gap: 1.5rem;
+        }
+
+        .market-data-banner span:first-child {
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+
         @media (max-width: 900px) {
           .layout-grid {
             grid-template-columns: 1fr;
           }
+        }
+
+        .toast-notification {
+          position: fixed;
+          top: 84px;
+          right: 1.5rem;
+          z-index: 120;
+          padding: 0.95rem 1.2rem;
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.95);
+          color: #fff;
+          font-size: 0.9rem;
+          font-weight: 600;
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+          backdrop-filter: blur(10px);
+          animation: toastIn 0.2s ease-out forwards;
+        }
+
+        .toast-notification.info { border-color: rgba(56, 189, 248, 0.3); }
+        .toast-notification.success { border-color: rgba(16, 185, 129, 0.3); }
+        .toast-notification.warning { border-color: rgba(234, 179, 8, 0.3); }
+        .toast-notification.error { border-color: rgba(248, 81, 73, 0.3); }
+
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateY(-12px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
