@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { isB3Open, fetchBTC24h } from '../utils/MarketStatus';
 
 // ── Day-of-week patterns (B3 historical tendencies) ─────────────────────────
 
@@ -112,10 +113,23 @@ const AssetBox = ({ asset, op, tip, dir }) => {
 
 const OP_FROM_DIRECTION = { 'COMPRA': 'COMPRAR', 'VENDA': 'VENDER', 'SEM OPERAÇÃO': 'AGUARDAR' };
 
+// ── Modo 24h (B3 fechada) — cripto + futuros internacionais ─────────────────
+
+const toCryptoDir = (score) => {
+  if (score >=  25) return { key: 'FORTE_COMPRA', label: 'RISCO-ON FORTE', icon: '▲▲', color: '#00ff88', op: 'COMPRAR' };
+  if (score >=  10) return { key: 'COMPRA',        label: 'RISCO-ON',       icon: '▲',  color: '#4ade80', op: 'COMPRAR' };
+  if (score >= -9)  return { key: 'NEUTRO',        label: 'LATERAL',        icon: '⏸',  color: '#fbbf24', op: 'AGUARDAR' };
+  if (score >= -24) return { key: 'VENDA',         label: 'RISCO-OFF',      icon: '▼',  color: '#f97316', op: 'VENDER' };
+  return              { key: 'FORTE_VENDA',  label: 'RISCO-OFF FORTE', icon: '▼▼', color: '#ff3355', op: 'VENDER' };
+};
+
 const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
   const [sp, setSp]         = useState(null);
   const [spLoading, setSpL] = useState(true);
+  const [btc, setBtc]       = useState(null);
+  const [btcLoading, setBtcL] = useState(true);
   const [phase, setPhase]   = useState(getPhase);
+  const [showDetails, setShowDetails] = useState(false);
   const clockRef            = useRef(null);
 
   // Atualiza só o relógio via DOM; fase só re-renderiza quando muda de etapa
@@ -138,6 +152,14 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
     setSpL(true);
     fetchSPFutures().then(d => { setSp(d); setSpL(false); });
     const t = setInterval(() => fetchSPFutures().then(setSp), 300000); // refresh every 5m
+    return () => clearInterval(t);
+  }, []);
+
+  // Fetch BTC 24h (modo cripto/internacional quando a B3 está fechada)
+  useEffect(() => {
+    setBtcL(true);
+    fetchBTC24h().then(d => { setBtc(d); setBtcL(false); }).catch(() => setBtcL(false));
+    const t = setInterval(() => fetchBTC24h().then(setBtc).catch(() => {}), 120000); // refresh every 2m
     return () => clearInterval(t);
   }, []);
 
@@ -186,7 +208,14 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
     },
   ];
 
-  const isPregao = dow >= 1 && dow <= 5;
+  const isPregao   = dow >= 1 && dow <= 5;
+  const marketOpen = isB3Open();
+
+  const btcChange   = btc?.changePct ?? null;
+  const cryptoScore = Math.round((btcChange ?? 0) * 3 + (spChange ?? 0) * 6);
+  const cDir        = toCryptoDir(cryptoScore);
+  const nextOpenLabel = (dow === 5 || dow === 6 || dow === 0) ? 'na segunda-feira' : 'amanhã';
+
   const isCustomAsset = asset && !['WIN', 'DOL'].includes(asset.key);
   const customOp = assetResult ? OP_FROM_DIRECTION[assetResult.direction] : 'AGUARDAR';
   const customTip = assetResult
@@ -211,10 +240,47 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
         </div>
       </div>
 
-      {!isPregao ? (
-        <div className="dd-closed">
-          ⚪ Sem pregão hoje — use o tempo para estudar os gráficos e planejar a semana.
-        </div>
+      {!marketOpen ? (
+        <>
+          <div className="dd-afterhours-badge">
+            {isPregao ? '🌙 Fora do horário de pregão B3' : `⚪ ${dowInfo.name} — B3 fechada`} · Modo 24h: Cripto &amp; Internacional
+          </div>
+
+          <div className="dd-verdict" style={{ background: cDir.color + '0d', borderColor: cDir.color + '33' }}>
+            <div className="ddv-icon" style={{ color: cDir.color, textShadow: `0 0 20px ${cDir.color}` }}>
+              {cDir.icon}
+            </div>
+            <div className="ddv-main">
+              <div className="ddv-label">SENTIMENTO 24H · CRIPTO + FUTUROS EUA</div>
+              <div className="ddv-dir" style={{ color: cDir.color }}>{cDir.label}</div>
+              <div className="ddv-window" style={{ color: cDir.color }}>Score 24h: {cryptoScore > 0 ? '+' : ''}{cryptoScore}</div>
+            </div>
+          </div>
+
+          <div className="dd-assets">
+            <div className="dd-sect-title">O que acompanhar agora</div>
+            <div className="dd-assets-grid">
+              <AssetBox
+                asset="₿ Bitcoin (BTC)"
+                op={cDir.op}
+                tip={btc ? `24h: ${btc.changePct > 0 ? '+' : ''}${btc.changePct.toFixed(1)}%` : (btcLoading ? 'Buscando...' : 'Indisponível')}
+                dir={cDir}
+              />
+              <AssetBox
+                asset="🌐 S&P 500 (Futuros)"
+                op={cDir.op}
+                tip={sp ? `${sp.change > 0 ? '+' : ''}${sp.change}%` : (spLoading ? 'Buscando...' : 'Indisponível')}
+                dir={cDir}
+              />
+            </div>
+          </div>
+
+          <div className="dd-rules">
+            <div className="dd-rule">🕐 <strong>Cripto opera 24/7</strong> — sem janela de pregão, mas use sempre stop de preço.</div>
+            <div className="dd-rule">🇧🇷 <strong>B3 reabre</strong> {nextOpenLabel} às 10:00 (horário de Brasília).</div>
+            <div className="dd-rule">🔍 Pesquise BTC, ETH ou outro par no <strong>Robô Analista Técnico</strong> para um setup completo.</div>
+          </div>
+        </>
       ) : (
         <>
           {/* ── VEREDITO ──────────────────────────────────────────── */}
@@ -234,12 +300,6 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
             </div>
           </div>
 
-          {/* ── FATORES ───────────────────────────────────────────── */}
-          <div className="dd-factors">
-            <div className="dd-sect-title">Fatores confluentes</div>
-            {factors.map((f, i) => <FactorRow key={i} {...f} />)}
-          </div>
-
           {/* ── ATIVOS ────────────────────────────────────────────── */}
           <div className="dd-assets">
             <div className="dd-sect-title">O que operar hoje</div>
@@ -252,13 +312,27 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
             </div>
           </div>
 
-          {/* ── REGRAS DO DIA ─────────────────────────────────────── */}
-          <div className="dd-rules">
-            <div className="dd-rule">⏰ <strong>Janelas de trade:</strong> 10:30–11:30 e 14:30–16:00 (horário de Brasília)</div>
-            <div className="dd-rule">🛑 <strong>Stop obrigatório</strong> em todo trade — sem exceção</div>
-            {dowInfo.bias < 0 && <div className="dd-rule warn">⚠️ {dowInfo.note}</div>}
-            {dir.key === 'NEUTRO' && <div className="dd-rule warn">⏸ Score neutro — a melhor operação de hoje pode ser não operar</div>}
-          </div>
+          <button className="dd-toggle" onClick={() => setShowDetails(v => !v)}>
+            {showDetails ? 'Ocultar fatores e regras ▲' : 'Ver fatores confluentes e regras do dia ▼'}
+          </button>
+
+          {showDetails && (
+            <>
+              {/* ── FATORES ───────────────────────────────────────────── */}
+              <div className="dd-factors">
+                <div className="dd-sect-title">Fatores confluentes</div>
+                {factors.map((f, i) => <FactorRow key={i} {...f} />)}
+              </div>
+
+              {/* ── REGRAS DO DIA ─────────────────────────────────────── */}
+              <div className="dd-rules">
+                <div className="dd-rule">⏰ <strong>Janelas de trade:</strong> 10:30–11:30 e 14:30–16:00 (horário de Brasília)</div>
+                <div className="dd-rule">🛑 <strong>Stop obrigatório</strong> em todo trade — sem exceção</div>
+                {dowInfo.bias < 0 && <div className="dd-rule warn">⚠️ {dowInfo.note}</div>}
+                {dir.key === 'NEUTRO' && <div className="dd-rule warn">⏸ Score neutro — a melhor operação de hoje pode ser não operar</div>}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -289,9 +363,10 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
         .dsp-label { font-size: .5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
         .dsp-val   { font-size: 1.2rem; font-weight: 900; font-family: var(--font-mono); }
 
-        .dd-closed {
-          padding: 1.2rem; text-align: center; color: var(--text-muted); font-size: .75rem;
-          background: rgba(255,255,255,.02); border-radius: 10px; border: 1px solid rgba(255,255,255,.05);
+        .dd-afterhours-badge {
+          font-size: .62rem; font-weight: 700; color: var(--text-muted);
+          padding: .5rem .7rem; border-radius: 8px; margin-bottom: .9rem;
+          background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
         }
 
         /* Verdict */
@@ -326,6 +401,14 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
         .ddf-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
         .ddf-val   { font-size: .6rem; color: var(--text-muted); font-family: var(--font-mono); }
         .ddf-score { font-size: .72rem; font-weight: 800; font-family: var(--font-mono); }
+
+        .dd-toggle {
+          width: 100%; font-size: .62rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+          border-radius: 8px; padding: .45rem .6rem; cursor: pointer; transition: all .15s;
+          margin-bottom: .9rem;
+        }
+        .dd-toggle:hover { background: rgba(255,255,255,.06); color: var(--text-secondary); }
 
         /* Assets */
         .dd-assets { margin-bottom: .9rem; }

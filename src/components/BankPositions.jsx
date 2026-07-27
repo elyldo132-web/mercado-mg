@@ -101,6 +101,7 @@ const PositionBar = ({ long, short, color }) => {
 const BankPositions = ({ macroSignal, asset }) => {
   const [positions, setPositions] = useState(null);
   const [loading, setLoading]     = useState(true);
+  const [showProfiles, setShowProfiles] = useState(false);
   const tsRef = useRef(null);
 
   const macroScore = macroSignal?.score ?? 0;
@@ -155,6 +156,9 @@ const BankPositions = ({ macroSignal, asset }) => {
             <span className="bp-badge estimated">ESTIMADO</span>
           )}
           <span ref={tsRef} className="bp-ts"></span>
+          <button className="bp-toggle" onClick={() => setShowProfiles(v => !v)}>
+            {showProfiles ? 'Ocultar perfis ▲' : 'Ver por perfil ▼'}
+          </button>
         </div>
       </div>
 
@@ -174,6 +178,7 @@ const BankPositions = ({ macroSignal, asset }) => {
                 <div className="bp-asset-sub">{asset.sub}</div>
               </div>
             </div>
+            {showProfiles && (
             <div className="bp-profiles">
               {PROFILES.map(p => {
                 const d = asset.data[p.key];
@@ -203,6 +208,7 @@ const BankPositions = ({ macroSignal, asset }) => {
                 );
               })}
             </div>
+            )}
 
             {/* Sinal de consenso */}
             <div className="bp-consensus">
@@ -259,6 +265,12 @@ const BankPositions = ({ macroSignal, asset }) => {
           color: #fbbf24; background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3);
         }
         .bp-ts { font-size: .6rem; color: var(--text-muted); font-family: var(--font-mono); }
+        .bp-toggle {
+          font-size: .58rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+          border-radius: 999px; padding: .25rem .6rem; cursor: pointer; transition: all .15s;
+        }
+        .bp-toggle:hover { background: rgba(255,255,255,.08); color: var(--text-secondary); }
 
         .bp-grid {
           display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;

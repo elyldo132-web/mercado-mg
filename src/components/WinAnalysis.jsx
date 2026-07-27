@@ -185,6 +185,7 @@ const buildSetup = (ibov, total, direction) => {
 const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) => {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showFactors, setShowFactors] = useState(false);
 
   // Controle interno
   const lastAlertRef  = useRef(lastAlert);
@@ -332,23 +333,25 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
             </div>
             <div className="compass-gauge-area">
               <CompassGauge score={data.total} direction={data.direction} />
-              <div className="compass-side-info">
-                <div className="csi-dir" style={{ color: data.direction.color, textShadow: `0 0 16px ${data.direction.color}` }}>
-                  {data.direction.icon} {data.direction.dir}
-                </div>
-                <div className="csi-strength">{data.direction.strength}</div>
-                {data.divergence && (
+              {data.divergence && (
+                <div className="compass-side-info">
                   <div className={`csi-divergence ${data.divergence.type}`}>
                     {data.divergence.msg}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* ── SCORECARD ────────────────────────────────────────────── */}
           <div className="win-scorecard">
-            <div className="win-scorecard-title">Fatores Macroeconômicos</div>
+            <div className="win-scorecard-title-row">
+              <div className="win-scorecard-title">Fatores Macroeconômicos</div>
+              <button className="win-toggle" onClick={() => setShowFactors(v => !v)}>
+                {showFactors ? 'Ocultar detalhes ▲' : 'Ver detalhes ▼'}
+              </button>
+            </div>
+            {showFactors && (
             <div className="win-factors">
               {data.factors.map(f => {
                 const absScore = Math.abs(f.score);
@@ -378,6 +381,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
                 );
               })}
             </div>
+            )}
 
             {/* Total score bar */}
             <div className="total-score-row">
@@ -412,16 +416,16 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
           {/* ── DIRECTION + SETUP ─────────────────────────────────────── */}
           <div className="win-right">
 
-            {/* Direction verdict */}
-            <div className="win-verdict" style={{ borderColor: dir?.color + '44', background: dir?.glow?.replace('.4', '.06') }}>
-              <div className="verdict-icon" style={{ color: dir?.color, textShadow: `0 0 20px ${dir?.color}` }}>
-                {dir?.icon}
-              </div>
-              <div>
-                <div className="verdict-dir" style={{ color: dir?.color }}>{dir?.dir}</div>
-                <div className="verdict-strength">{dir?.strength}</div>
-              </div>
-              {setup && (
+            {/* Direction verdict — só mostra quando há setup real (senão é redundante com o gauge acima) */}
+            {setup && (
+              <div className="win-verdict" style={{ borderColor: dir?.color + '44', background: dir?.glow?.replace('.4', '.06') }}>
+                <div className="verdict-icon" style={{ color: dir?.color, textShadow: `0 0 20px ${dir?.color}` }}>
+                  {dir?.icon}
+                </div>
+                <div>
+                  <div className="verdict-dir" style={{ color: dir?.color }}>{dir?.dir}</div>
+                  <div className="verdict-strength">{dir?.strength}</div>
+                </div>
                 <div className="verdict-conviction">
                   <div className="conv-label">Convicção</div>
                   <div className="conv-bar-wrap">
@@ -431,8 +435,8 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
                   </div>
                   <div className="conv-value" style={{ color: dir?.color }}>{setup.conviction}%</div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Trade Setup */}
             {setup ? (
@@ -488,13 +492,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
                   <span className="setup-warn">⚠️ Sempre use stop loss. Análise não é recomendação.</span>
                 </div>
               </div>
-            ) : (
-              <div className="win-neutral-msg">
-                <div style={{ fontSize: '2rem' }}>●</div>
-                <strong>Score NEUTRO</strong>
-                <p>Fatores macro sem direção clara.<br />Aguardar gatilho antes de operar.</p>
-              </div>
-            )}
+            ) : null}
 
             {/* Macro Reading */}
             <div className="win-reading">
@@ -598,13 +596,6 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
         .compass-side-info {
           display: flex; flex-direction: column; gap: .4rem; flex: 1; min-width: 140px;
         }
-        .csi-dir {
-          font-size: 1.5rem; font-weight: 900; letter-spacing: -.5px; line-height: 1;
-        }
-        .csi-strength {
-          font-size: .68rem; font-weight: 800; color: var(--text-muted);
-          text-transform: uppercase; letter-spacing: .07em;
-        }
         .csi-divergence {
           font-size: .68rem; font-weight: 700; line-height: 1.4;
           padding: .45rem .6rem; border-radius: 8px; margin-top: .2rem;
@@ -618,6 +609,14 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
         /* Scorecard */
         .win-scorecard { display: flex; flex-direction: column; gap: .5rem; }
         .win-scorecard-title { font-size: .65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .25rem; }
+        .win-scorecard-title-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+        .win-scorecard-title-row .win-scorecard-title { margin-bottom: 0; }
+        .win-toggle {
+          font-size: .58rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+          border-radius: 999px; padding: .25rem .6rem; cursor: pointer; transition: all .15s;
+        }
+        .win-toggle:hover { background: rgba(255,255,255,.08); color: var(--text-secondary); }
 
         .win-factors { display: flex; flex-direction: column; gap: .22rem; }
         .factor-row {
@@ -705,15 +704,6 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
         .setup-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .35rem; }
         .setup-validity { font-size: .63rem; color: #06b6d4; font-weight: 700; }
         .setup-warn { font-size: .57rem; color: var(--text-muted); }
-
-        /* Neutral */
-        .win-neutral-msg {
-          display: flex; flex-direction: column; align-items: center; gap: .35rem;
-          padding: 1.5rem; text-align: center; color: var(--text-muted);
-          background: rgba(99,149,255,.05); border: 1px solid rgba(99,149,255,.2); border-radius: 12px;
-        }
-        .win-neutral-msg strong { color: #6395ff; }
-        .win-neutral-msg p { font-size: .75rem; margin: 0; line-height: 1.5; }
 
         /* Reading */
         .win-reading {

@@ -17,6 +17,7 @@ import { Activity, Zap } from 'lucide-react';
 import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
 import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
+import { scanRealOpportunities } from '../utils/OpportunityScan';
 
 // ── Pesquisa de ativos para simulação ────────────────────────────────────────
 const PROXIES = [
@@ -316,6 +317,7 @@ const Dashboard = ({ onLogout }) => {
   const [macroSignal, setMacroSignal] = useState(null);
   const [searchedAsset, setSearchedAsset] = useState({ key: 'WIN', label: 'WIN Mini', icon: '📊', group: 'futuros' });
   const [searchedAssetResult, setSearchedAssetResult] = useState(null);
+  const [opportunities, setOpportunities] = useState([]);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -561,6 +563,15 @@ const Dashboard = ({ onLogout }) => {
     return () => stopFeed();
   }, [processNewAlert]);
 
+  // Varredura de oportunidades (cripto/B3/EUA com dado real) para o Guia de Trade
+  useEffect(() => {
+    let alive = true;
+    const scan = () => scanRealOpportunities().then(list => { if (alive) setOpportunities(list); }).catch(() => {});
+    scan();
+    const t = setInterval(scan, 180000); // a cada 3 min
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   // Market Pulse: Pequenas oscilações para manter o dashboard "vivo"
   useEffect(() => {
     const pulse = setInterval(() => {
@@ -715,7 +726,7 @@ const Dashboard = ({ onLogout }) => {
 
             <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} lastAlert={lastAlert} asset={searchedAsset} />
 
-            <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} />
+            <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} opportunities={opportunities} />
 
             <TechAnalysisBot onAssetChange={setSearchedAsset} onResult={setSearchedAssetResult} />
 

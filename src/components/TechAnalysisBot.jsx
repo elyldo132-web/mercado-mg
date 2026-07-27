@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { isB3Open } from '../utils/MarketStatus';
 
 // ── Assets ───────────────────────────────────────────────────────────────────
 
@@ -406,7 +407,14 @@ const calcOrdem = (res, saldo, contratosManual) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const TechAnalysisBot = ({ onAssetChange, onResult }) => {
-  const [assetKey, setAsset]    = useState(() => localStorage.getItem('tab_asset') || 'WIN');
+  const [assetKey, setAsset]    = useState(() => {
+    const saved = localStorage.getItem('tab_asset');
+    const b3Open = isB3Open();
+    const savedIsCrypto = saved && (saved.endsWith('USDT') || saved.endsWith('BTC'));
+    // B3 fechada e o ativo salvo é futuro/ação (preso ao horário da bolsa) → cai pro modo cripto 24h
+    if (saved && (b3Open || savedIsCrypto)) return saved;
+    return b3Open ? 'WIN' : 'BTCUSDT';
+  });
   const [searchTicker, setSearchTicker] = useState('');
   const [openPanel, setOpenPanel] = useState(null); // 'acoes' | 'cripto' | null
   const [tf, setTf]             = useState(TIMEFRAMES[1]);
@@ -419,6 +427,7 @@ const TechAnalysisBot = ({ onAssetChange, onResult }) => {
     return s ? parseFloat(s) : 1000;
   });
   const [contratosManual, setContratosManual] = useState(0);
+  const [showExec, setShowExec] = useState(false);
   const [toroToken,  setToroToken]  = useState(() => localStorage.getItem('toro_token') || '');
   const [showToken,  setShowToken]  = useState(false);
   const [enviando,   setEnviando]   = useState(false);
@@ -1118,23 +1127,28 @@ const TechAnalysisBot = ({ onAssetChange, onResult }) => {
       <div className="tab-ordem-wrap">
         <div className="tab-ordem-header">
           <span className="tab-ordem-title">💼 Ordem</span>
-          <div className="tab-ordem-inputs">
-            <div className="tab-saldo-row">
-              <span className="tab-saldo-label">Saldo R$</span>
-              <input type="number" className="tab-saldo-input font-mono"
-                value={saldo} min="0" step="100"
-                onChange={e => handleSaldo(e.target.value)} />
+          <button className="tab-exec-toggle" onClick={() => setShowExec(v => !v)}>
+            {showExec ? 'Ocultar execução ▲' : '⚙️ Configurar execução ▼'}
+          </button>
+          {showExec && (
+            <div className="tab-ordem-inputs">
+              <div className="tab-saldo-row">
+                <span className="tab-saldo-label">Saldo R$</span>
+                <input type="number" className="tab-saldo-input font-mono"
+                  value={saldo} min="0" step="100"
+                  onChange={e => handleSaldo(e.target.value)} />
+              </div>
+              <div className="tab-saldo-row">
+                <span className="tab-saldo-label">Contratos</span>
+                <input type="number" className="tab-saldo-input font-mono"
+                  value={contratosManual || ''} min="1" max="99" placeholder="auto"
+                  onChange={e => {
+                    const v = parseInt(e.target.value);
+                    setContratosManual(isNaN(v) || v < 1 ? 0 : v);
+                  }} />
+              </div>
             </div>
-            <div className="tab-saldo-row">
-              <span className="tab-saldo-label">Contratos</span>
-              <input type="number" className="tab-saldo-input font-mono"
-                value={contratosManual || ''} min="1" max="99" placeholder="auto"
-                onChange={e => {
-                  const v = parseInt(e.target.value);
-                  setContratosManual(isNaN(v) || v < 1 ? 0 : v);
-                }} />
-            </div>
-          </div>
+          )}
         </div>
 
         {ordem ? (
@@ -1172,39 +1186,43 @@ const TechAnalysisBot = ({ onAssetChange, onResult }) => {
             </div>
 
             {/* Toro — token + botões */}
-            <div className="toro-send-wrap">
-              <div className="toro-token-row">
-                <span className="toro-logo">🐂 Toro</span>
-                <input type={showToken ? 'text' : 'password'} className="toro-token-input font-mono"
-                  placeholder="Token API" value={toroToken}
-                  onChange={e => { setToroToken(e.target.value); localStorage.setItem('toro_token', e.target.value); }} />
-                <button className="toro-eye-btn" onClick={() => setShowToken(p => !p)}>
-                  {showToken ? '🙈' : '👁'}
-                </button>
-              </div>
-              <div className="toro-action-row">
-                <button
-                  className={`toro-exec-btn${enviando ? ' sending' : ''}`}
-                  onClick={enviarOrdemManual}
-                  disabled={enviando || cancelando}
-                  style={{ background: dc?.color + '22', borderColor: dc?.color + '88', color: dc?.color }}
-                >
-                  {enviando ? '⟳ Enviando...' : `▶ Executar Ordem`}
-                </button>
-                <button
-                  className={`toro-cancel-btn${cancelando ? ' sending' : ''}`}
-                  onClick={cancelarOrdem}
-                  disabled={enviando || cancelando}
-                >
-                  {cancelando ? '⟳ Cancelando...' : '✕ Cancelar Ordem'}
-                </button>
-              </div>
-              {toroStatus && (
-                <div className={`toro-status ${toroStatus.ok === true ? 'ok' : toroStatus.ok === false ? 'err' : 'warn'}`}>
-                  {toroStatus.msg}
+            {showExec ? (
+              <div className="toro-send-wrap">
+                <div className="toro-token-row">
+                  <span className="toro-logo">🐂 Toro</span>
+                  <input type={showToken ? 'text' : 'password'} className="toro-token-input font-mono"
+                    placeholder="Token API" value={toroToken}
+                    onChange={e => { setToroToken(e.target.value); localStorage.setItem('toro_token', e.target.value); }} />
+                  <button className="toro-eye-btn" onClick={() => setShowToken(p => !p)}>
+                    {showToken ? '🙈' : '👁'}
+                  </button>
                 </div>
-              )}
-            </div>
+                <div className="toro-action-row">
+                  <button
+                    className={`toro-exec-btn${enviando ? ' sending' : ''}`}
+                    onClick={enviarOrdemManual}
+                    disabled={enviando || cancelando}
+                    style={{ background: dc?.color + '22', borderColor: dc?.color + '88', color: dc?.color }}
+                  >
+                    {enviando ? '⟳ Enviando...' : `▶ Executar Ordem`}
+                  </button>
+                  <button
+                    className={`toro-cancel-btn${cancelando ? ' sending' : ''}`}
+                    onClick={cancelarOrdem}
+                    disabled={enviando || cancelando}
+                  >
+                    {cancelando ? '⟳ Cancelando...' : '✕ Cancelar Ordem'}
+                  </button>
+                </div>
+                {toroStatus && (
+                  <div className={`toro-status ${toroStatus.ok === true ? 'ok' : toroStatus.ok === false ? 'err' : 'warn'}`}>
+                    {toroStatus.msg}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="tab-exec-hint">⚙️ Clique em "Configurar execução" acima para enviar essa ordem para a corretora.</div>
+            )}
           </div>
         ) : (
           <div className="tab-ordem-idle">
@@ -1456,6 +1474,16 @@ const TechAnalysisBot = ({ onAssetChange, onResult }) => {
           flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem;
         }
         .tab-ordem-title { font-size: .72rem; font-weight: 800; color: var(--text-primary); }
+        .tab-exec-toggle {
+          font-size: .6rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+          border-radius: 999px; padding: .28rem .65rem; cursor: pointer; transition: all .15s;
+        }
+        .tab-exec-toggle:hover { background: rgba(255,255,255,.08); color: var(--text-secondary); }
+        .tab-exec-hint {
+          font-size: .62rem; color: var(--text-muted); text-align: center;
+          padding: .5rem; background: rgba(255,255,255,.02); border-radius: 8px;
+        }
         .tab-ordem-inputs { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
         .tab-saldo-row { display: flex; align-items: center; gap: .4rem; }
         .tab-saldo-label { font-size: .6rem; color: var(--text-muted); white-space: nowrap; }

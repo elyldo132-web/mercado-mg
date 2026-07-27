@@ -251,9 +251,30 @@ const CustomAssetSetup = ({ asset, result }) => {
   );
 };
 
+// ── Linha compacta para oportunidades encontradas pelo scanner automático ───
+
+const OpportunityRow = ({ opp }) => {
+  const isCompra = opp.signal === 'COMPRA';
+  const dc = isCompra ? '#00ff88' : '#ff3355';
+  const fmt = (n) => (opp.group === 'acoes-eua' || opp.group === 'cripto')
+    ? '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+    : 'R$ ' + n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  return (
+    <div className="opp-row">
+      <span className="opp-row-asset">{opp.icon} {opp.label}</span>
+      <span className="opp-row-cat">{opp.cat}</span>
+      <span className="opp-row-dir" style={{ color: dc, borderColor: dc + '44', background: dc + '12' }}>
+        {isCompra ? '▲' : '▼'} {opp.signal}
+      </span>
+      <span className="opp-row-price font-mono">{fmt(opp.price)}</span>
+      <span className="opp-row-change font-mono" style={{ color: dc }}>{opp.change > 0 ? '+' : ''}{opp.change}%</span>
+    </div>
+  );
+};
+
 // ── Main component ───────────────────────────────────────────────────────────
 
-const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, assetResult }) => {
+const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, assetResult, opportunities }) => {
   const { checks, verdict, dir, score, conviction } = useMemo(
     () => evalGuide(macroSignal, lastAlert),
     [macroSignal, lastAlert],
@@ -264,6 +285,8 @@ const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, asset
 
   const v = VERDICTS[verdict];
   const isCustomAsset = asset && !['WIN', 'DOL'].includes(asset.key);
+  const filteredOpportunities = (opportunities || []).filter(o => !(isCustomAsset && o.key === asset.key));
+  const hasOpportunities = filteredOpportunities.length > 0;
 
   return (
     <div className="trade-guide">
@@ -326,14 +349,26 @@ const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, asset
       </div>
 
       {/* ── SETUPS ──────────────────────────────────────────────────── */}
-      {(verdict !== 'AGUARDAR' || isCustomAsset) && (
+      {(verdict !== 'AGUARDAR' || isCustomAsset || hasOpportunities) && (
         <div className="tg-setups">
-          <div className="tg-setups-title">Setups para operar agora</div>
-          <div className={`tg-setups-grid ${isCustomAsset ? 'tg-setups-grid-3' : ''}`}>
-            <SetupCard s={winSetup} verdictColor={v.color} />
-            <SetupCard s={dolSetup} verdictColor={v.color} />
-            {isCustomAsset && <CustomAssetSetup asset={asset} result={assetResult} />}
-          </div>
+          {(verdict !== 'AGUARDAR' || isCustomAsset) && (
+            <>
+              <div className="tg-setups-title">Setups para operar agora</div>
+              <div className="tg-setups-grid">
+                <SetupCard s={winSetup} verdictColor={v.color} />
+                <SetupCard s={dolSetup} verdictColor={v.color} />
+                {isCustomAsset && <CustomAssetSetup asset={asset} result={assetResult} />}
+              </div>
+            </>
+          )}
+
+          {hasOpportunities && (
+            <div className="tg-opp-list">
+              <div className="tg-setups-title">🔍 Oportunidades encontradas (scanner automático)</div>
+              {filteredOpportunities.map(o => <OpportunityRow key={o.key} opp={o} />)}
+            </div>
+          )}
+
           <div className="tg-disclaimer">
             ⚠️ Use sempre stop loss. Este guia é educacional e não constitui recomendação de investimento.
           </div>
@@ -420,10 +455,24 @@ const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, asset
           text-transform: uppercase; letter-spacing: .08em; margin-bottom: .6rem;
         }
         .tg-setups-grid {
-          display: grid; grid-template-columns: 1fr 1fr; gap: .8rem;
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .8rem;
         }
-        .tg-setups-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-        @media (max-width: 700px) { .tg-setups-grid, .tg-setups-grid-3 { grid-template-columns: 1fr; } }
+
+        /* Lista compacta de oportunidades do scanner */
+        .tg-opp-list { margin-top: .9rem; display: flex; flex-direction: column; gap: .3rem; }
+        .opp-row {
+          display: flex; align-items: center; gap: .5rem;
+          padding: .4rem .6rem; border-radius: 8px;
+          background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05);
+        }
+        .opp-row-asset { font-size: .68rem; font-weight: 700; color: var(--text-secondary); min-width: 90px; }
+        .opp-row-cat { font-size: .56rem; color: var(--text-muted); min-width: 44px; }
+        .opp-row-dir {
+          font-size: .56rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;
+          border: 1px solid; text-transform: uppercase; letter-spacing: .3px;
+        }
+        .opp-row-price { font-size: .66rem; color: var(--text-secondary); margin-left: auto; }
+        .opp-row-change { font-size: .64rem; font-weight: 800; min-width: 50px; text-align: right; }
 
         .tg-setup-card {
           border: 1px solid rgba(255,255,255,.07); border-radius: 12px;
