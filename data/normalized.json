@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-06-07T21:07:42.500Z",
+  "items": [
+    {
+      "source": "SimulatedFX",
+      "original": {
+        "series": "USD/BRL",
+        "raw": 5.02
+      },
+      "type": "macro",
+      "metric": "fx_usd",
+      "value": 5.02,
+      "values": {
+        "BRL": 5.02,
+        "EUR": 0.94,
+        "JPY": 157.8
+      },
+      "unit": "BRL per USD",
+      "timestamp": "2026-06-07T21:07:42.495Z"
+    },
+    {
+      "source": "SimulatedBTC",
+      "original": {
+        "symbol": "BTC",
+        "raw": 68245.12
+      },
+      "type": "macro",
+      "metric": "crypto_btc_usd",
+      "value": 68245.12,
+      "unit": "USD",
+      "timestamp": "2026-06-07T21:07:42.500Z"
+    },
+    {
+      "source": "SimulatedNews",
+      "original": {
+        "headline": "FED indica que inflação persistente nos EUA pode atrasar corte de juros para o final do ano."
+      },
+      "type": "news",
+      "metric": "headline",
+      "value": "FED indica que inflação persistente nos EUA pode atrasar corte de juros para o final do ano.",
+      "unit": "text",
+      "timestamp": "2026-06-07T21:07:42.500Z"
+    }
+  ]
+}

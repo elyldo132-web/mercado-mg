@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 
 // ── Signal aggregation ───────────────────────────────────────────────────────
 
@@ -36,6 +37,26 @@ const newsSentimentLabel = (score) => {
   return               { label: 'PESSIMISTA', color: '#ff3355' };
 };
 
+// ── Histórico do sinal (localStorage) ────────────────────────────────────────
+
+const HISTORY_KEY = 'signal_history';
+const SAMPLE_INTERVAL_MS = 5 * 60 * 1000; // amostra a cada 5 min
+const MAX_SAMPLES = 96; // ~8h de histórico
+
+const loadSignalHistory = () => {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+};
+
+const pushSignalSample = (sample) => {
+  const hist = loadSignalHistory();
+  const now = Date.now();
+  const last = hist[hist.length - 1];
+  if (last && now - last.t < SAMPLE_INTERVAL_MS) return hist;
+  const next = [...hist, { t: now, ...sample }].slice(-MAX_SAMPLES);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+  return next;
+};
+
 // ── Pulse animation (sound-like) ─────────────────────────────────────────────
 const usePrevSignal = (signal) => {
   const ref = useRef(signal);
@@ -67,6 +88,16 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
 
   const prev = usePrevSignal(levelKey);
   const changed = prev !== levelKey;
+
+  // ── Histórico para o gráfico de evolução ────────────────────────────────
+  const [history, setHistory] = useState(loadSignalHistory);
+  useEffect(() => {
+    setHistory(pushSignalSample({ macro: macroScore, news: newsScore, momentum: Math.round(momentumScore), combinado: combined }));
+  }, [macroScore, newsScore, momentumScore, combined]);
+
+  const chartData = history.map(h => ({
+    time: h.t, Macro: h.macro, Notícias: h.news, Momentum: h.momentum, Combinado: h.combinado,
+  }));
 
   const conviction = Math.min(98, Math.max(10, Math.round(50 + Math.abs(combined) * 0.65)));
 
@@ -172,6 +203,33 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
         })}
       </div>
 
+      {/* ── Evolução do sinal ───────────────────────────────────── */}
+      {chartData.length >= 2 && (
+        <div className="sp-history">
+          <div className="sp-history-title">Evolução do Sinal — últimas horas</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
+              <XAxis
+                dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }}
+                tickFormatter={(t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                axisLine={{ stroke: 'rgba(255,255,255,.1)' }} tickLine={false}
+              />
+              <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={false} tickLine={false} width={30} />
+              <Tooltip
+                contentStyle={{ background: '#0a0d14', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, fontSize: 11 }}
+                labelFormatter={(t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Line type="monotone" dataKey="Macro"     stroke="#6395ff" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Notícias"  stroke="#a855f7" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Momentum"  stroke="#fbbf24" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Combinado" stroke="#00ff88" strokeWidth={2.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* ── Action row ──────────────────────────────────────────── */}
       <div className="sp-action">
         {levelKey === 'AGUARDAR' ? (
@@ -183,7 +241,6 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
             {level.icon} {level.label}: consulte o setup no painel de Análise Macro acima.
           </div>
         )}
-        {changed && <div className="sp-changed-badge">🔔 Sinal atualizado</div>}
       </div>
 
       <style jsx="true">{`
@@ -250,6 +307,12 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
         }
         .sp-weight { font-size: .55rem; color: var(--text-muted); min-width: 24px; text-align: right; }
 
+        .sp-history { margin-bottom: .8rem; }
+        .sp-history-title {
+          font-size: .58rem; font-weight: 800; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: .08em; margin-bottom: .3rem;
+        }
+
         .sp-action { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
         .sp-action-msg { font-size: .73rem; font-weight: 700; }
         .sp-wait-msg   { font-size: .73rem; color: #fbbf24; }
@@ -264,4 +327,4 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
   );
 };
 
-export default SignalPanel;
+export default React.memo(SignalPanel);

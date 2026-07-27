@@ -3,24 +3,283 @@ import Header from './Header';
 import NewsInput from './NewsInput';
 import MacroAlert from './MacroAlert';
 import History from './History';
-import EconomicCalendar from './EconomicCalendar';
-import CryptoScanner from './CryptoScanner';
-import SentimentHeatmap from './SentimentHeatmap';
-import TradingPanel from './TradingPanel';
-import YieldSimulator from './YieldSimulator';
-import ResultCharts from './ResultCharts';
-import StockInsights from './StockInsights';
-import FlowRadar from './FlowRadar';
-import MarketPulse from './MarketPulse';
 import OpportunityScanner from './OpportunityScanner';
 import WinAnalysis from './WinAnalysis';
-import TradingViewCharts from './TradingViewCharts';
-import RiskCalculator from './RiskCalculator';
 import SignalPanel from './SignalPanel';
-import { TrendingUp, Activity, PieChart, Zap } from 'lucide-react';
+import DayDirection from './DayDirection';
+import TradeGuide from './TradeGuide';
+import TechAnalysisBot from './TechAnalysisBot';
+import BankPositions from './BankPositions';
+import BrokerConfig from './BrokerConfig';
+import DailyReport from './DailyReport';
+import YieldSimulator from './YieldSimulator';
+import { Activity, Zap } from 'lucide-react';
 import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
 import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
+
+// ── Pesquisa de ativos para simulação ────────────────────────────────────────
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+const SIM_SUGGESTIONS = [
+  // Ações
+  { ticker: 'PETR4.SA', label: 'Petrobras', cat: 'acao' }, { ticker: 'VALE3.SA', label: 'Vale', cat: 'acao' },
+  { ticker: 'ITUB4.SA', label: 'Itaú', cat: 'acao' }, { ticker: 'WEGE3.SA', label: 'WEG', cat: 'acao' },
+  { ticker: 'TAEE11.SA', label: 'Taesa', cat: 'acao' },
+  // FIIs
+  { ticker: 'HGLG11.SA', label: 'HGLG11', cat: 'fii' }, { ticker: 'MXRF11.SA', label: 'MXRF11', cat: 'fii' },
+  { ticker: 'KNRI11.SA', label: 'KNRI11', cat: 'fii' }, { ticker: 'XPML11.SA', label: 'XPML11', cat: 'fii' },
+  { ticker: 'VISC11.SA', label: 'VISC11', cat: 'fii' }, { ticker: 'HGBS11.SA', label: 'HGBS11', cat: 'fii' },
+  { ticker: 'BCFF11.SA', label: 'BCFF11', cat: 'fii' }, { ticker: 'RECR11.SA', label: 'RECR11', cat: 'fii' },
+  // ETFs e Internacional
+  { ticker: 'IVVB11.SA', label: 'S&P500 BR', cat: 'etf' }, { ticker: 'BOVA11.SA', label: 'IBOV', cat: 'etf' },
+  { ticker: 'AAPL', label: 'Apple', cat: 'int' }, { ticker: 'MSFT', label: 'Microsoft', cat: 'int' },
+  // Cripto
+  { ticker: 'BTC-USD', label: 'Bitcoin', cat: 'cripto' }, { ticker: 'ETH-USD', label: 'Ethereum', cat: 'cripto' },
+];
+
+const SimSearchBar = ({ onSelect }) => {
+  const [query, setQuery] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+  const [error, setError]   = React.useState(null);
+
+  const search = async (ticker) => {
+    const t = (ticker || query).trim().toUpperCase();
+    if (!t) return;
+    setLoading(true); setError(null); setResult(null);
+
+    const symbol = t.match(/^\d/) || t.endsWith('.SA') || t.includes('-') ? t : t + '.SA';
+    const isFII = /^\w+11(\.SA)?$/i.test(symbol);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1mo&includePrePost=false&events=div`;
+
+    for (const proxy of PROXIES) {
+      try {
+        const r = await fetch(proxy(url), { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const res = j?.chart?.result?.[0];
+        if (!res) continue;
+
+        const meta = res.meta;
+        const closes = res.indicators.quote[0].close.filter(c => c != null);
+        if (closes.length < 12) throw new Error('Dados insuficientes');
+
+        const first = closes[0];
+        const last = closes[closes.length - 1];
+        const years = closes.length / 12;
+        const totalReturn = (last / first - 1) * 100;
+        const annualReturn = (Math.pow(last / first, 1 / years) - 1) * 100;
+
+        const name = meta.shortName || meta.symbol || symbol;
+        const currency = meta.currency || 'BRL';
+
+        // Dividendos
+        const divEvents = res.events?.dividends ? Object.values(res.events.dividends) : [];
+        const now = Date.now() / 1000;
+        const oneYearAgo = now - 365 * 86400;
+        const recentDivs = divEvents.filter(d => d.date > oneYearAgo);
+        const divAnual = recentDivs.reduce((s, d) => s + d.amount, 0);
+        const divMensal = recentDivs.length > 0 ? divAnual / 12 : 0;
+        const divYield = last > 0 ? (divAnual / last) * 100 : 0;
+        const lastDiv = recentDivs.length > 0 ? recentDivs[recentDivs.length - 1] : null;
+
+        setResult({
+          ticker: symbol, name, currency, isFII,
+          price: last, first,
+          totalReturn: totalReturn.toFixed(1),
+          annualReturn: annualReturn.toFixed(1),
+          years: years.toFixed(1),
+          yield: divYield > 0 ? Math.round(divYield * 10) / 10 : Math.max(0, Math.round(annualReturn * 0.3 * 10) / 10),
+          growth: Math.round(annualReturn * 10) / 10,
+          divAnual: Math.round(divAnual * 100) / 100,
+          divMensal: Math.round(divMensal * 100) / 100,
+          divYield: Math.round(divYield * 10) / 10,
+          divCount: recentDivs.length,
+          lastDivAmount: lastDiv ? lastDiv.amount : null,
+          lastDivDate: lastDiv ? new Date(lastDiv.date * 1000).toLocaleDateString('pt-BR') : null,
+        });
+        setLoading(false);
+        return;
+      } catch { /* next proxy */ }
+    }
+    setError('Não encontrado. Tente: PETR4, HGLG11, MXRF11, AAPL, BTC-USD');
+    setLoading(false);
+  };
+
+  const handleUse = () => {
+    if (result && onSelect) onSelect(result);
+  };
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg,rgba(8,10,18,.97),rgba(12,16,28,.97))',
+      border: '1px solid rgba(249,115,22,.15)', borderRadius: 16, padding: '1.2rem',
+      marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '.75rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+        <span style={{ fontSize: '1.3rem' }}>🔍</span>
+        <div>
+          <div style={{ fontSize: '.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>Pesquisar Ativo</div>
+          <div style={{ fontSize: '.58rem', color: 'var(--text-muted)' }}>Ações, FIIs, ETFs, Fundos, Criptos — dados reais dos últimos 5 anos</div>
+        </div>
+      </div>
+
+      <form onSubmit={e => { e.preventDefault(); search(); }} style={{ display: 'flex', gap: '.4rem' }}>
+        <input
+          type="text" value={query} onChange={e => setQuery(e.target.value.toUpperCase())}
+          placeholder="PETR4, VALE3, AAPL, BTC-USD..."
+          style={{
+            flex: 1, padding: '.4rem .7rem', borderRadius: 8, fontSize: '.72rem',
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)',
+            color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+          }}
+        />
+        <button type="submit" disabled={loading} style={{
+          padding: '.4rem .9rem', borderRadius: 8, fontSize: '.68rem', fontWeight: 800,
+          background: 'rgba(249,115,22,.12)', border: '1px solid rgba(249,115,22,.4)',
+          color: '#f97316', cursor: 'pointer',
+        }}>
+          {loading ? '⟳' : '🔍 Buscar'}
+        </button>
+      </form>
+
+      {/* Sugestões por categoria */}
+      {[
+        { cat: 'fii', label: 'FIIs', color: '#fbbf24' },
+        { cat: 'acao', label: 'Ações', color: '#6395ff' },
+        { cat: 'etf', label: 'ETFs', color: '#a855f7' },
+        { cat: 'int', label: 'Internacional', color: '#60a5fa' },
+        { cat: 'cripto', label: 'Cripto', color: '#f0b90b' },
+      ].map(grp => (
+        <div key={grp.cat} style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '.5rem', fontWeight: 800, color: grp.color, textTransform: 'uppercase', letterSpacing: '.04em', minWidth: 55 }}>{grp.label}</span>
+          {SIM_SUGGESTIONS.filter(s => s.cat === grp.cat).map(s => (
+            <button key={s.ticker} onClick={() => { setQuery(s.ticker); search(s.ticker); }}
+              style={{
+                padding: '.2rem .45rem', borderRadius: 6, fontSize: '.55rem', fontWeight: 700,
+                background: 'rgba(255,255,255,.04)', border: `1px solid ${grp.color}22`,
+                color: 'var(--text-secondary)', cursor: 'pointer', transition: 'all .15s',
+              }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      ))}
+
+      {error && <div style={{ fontSize: '.65rem', color: '#ff3355' }}>⚠️ {error}</div>}
+
+      {/* Resultado */}
+      {result && (
+        <div style={{
+          padding: '.85rem', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: '.6rem',
+          background: 'rgba(255,255,255,.03)', border: `1px solid ${result.isFII ? 'rgba(251,191,36,.2)' : 'rgba(255,255,255,.08)'}`,
+        }}>
+          {/* Header: ticker + preço */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <span style={{ fontSize: '.9rem', fontWeight: 900, color: 'var(--text-primary)' }}>{result.ticker.replace('.SA','')}</span>
+              <span style={{ fontSize: '.6rem', color: 'var(--text-muted)' }}>{result.name}</span>
+              {result.isFII && <span style={{ fontSize: '.5rem', fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: 'rgba(251,191,36,.12)', border: '1px solid rgba(251,191,36,.3)', color: '#fbbf24' }}>FII</span>}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '.55rem', color: 'var(--text-muted)' }}>Valor Unitário</div>
+              <div style={{ fontSize: '1rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                {result.currency === 'USD' ? '$' : 'R$'} {result.price.toLocaleString(result.currency === 'USD' ? 'en-US' : 'pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
+          {/* Dividendos */}
+          {result.divAnual > 0 && (
+            <div style={{
+              display: 'flex', gap: '.5rem', flexWrap: 'wrap',
+              padding: '.6rem', borderRadius: 8,
+              background: 'rgba(16,185,129,.06)', border: '1px solid rgba(16,185,129,.15)',
+            }}>
+              <div style={{ flex: 1, minWidth: 80, textAlign: 'center' }}>
+                <div style={{ fontSize: '.48rem', color: '#10b981', textTransform: 'uppercase', fontWeight: 700 }}>Dividendo/mês</div>
+                <div style={{ fontSize: '.95rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#00ff88' }}>
+                  R$ {result.divMensal.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 80, textAlign: 'center' }}>
+                <div style={{ fontSize: '.48rem', color: '#10b981', textTransform: 'uppercase', fontWeight: 700 }}>Dividendo/ano</div>
+                <div style={{ fontSize: '.95rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#00ff88' }}>
+                  R$ {result.divAnual.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 80, textAlign: 'center' }}>
+                <div style={{ fontSize: '.48rem', color: '#10b981', textTransform: 'uppercase', fontWeight: 700 }}>Dividend Yield</div>
+                <div style={{ fontSize: '.95rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#00ff88' }}>
+                  {result.divYield}%
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 80, textAlign: 'center' }}>
+                <div style={{ fontSize: '.48rem', color: '#10b981', textTransform: 'uppercase', fontWeight: 700 }}>Pagamentos/ano</div>
+                <div style={{ fontSize: '.95rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#00ff88' }}>
+                  {result.divCount}x
+                </div>
+              </div>
+              {result.lastDivAmount && (
+                <div style={{ width: '100%', fontSize: '.58rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  Último: R$ {result.lastDivAmount.toFixed(4)} em {result.lastDivDate}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Exemplo com 100 cotas */}
+          {result.divMensal > 0 && (
+            <div style={{
+              padding: '.5rem .7rem', borderRadius: 7,
+              background: 'rgba(0,0,0,.25)', fontSize: '.65rem', color: 'var(--text-secondary)', lineHeight: 1.6,
+            }}>
+              💡 <strong>100 cotas</strong> a R$ {result.price.toFixed(2)} = <strong style={{ color: 'var(--text-primary)' }}>R$ {(result.price * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> investidos
+              → recebe <strong style={{ color: '#00ff88' }}>R$ {(result.divMensal * 100).toFixed(2)}/mês</strong> em dividendos
+              ({(result.divAnual * 100).toFixed(2)}/ano)
+            </div>
+          )}
+
+          {/* Performance */}
+          <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 80, padding: '.4rem .5rem', borderRadius: 7, background: 'rgba(0,0,0,.2)', textAlign: 'center' }}>
+              <div style={{ fontSize: '.48rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Retorno {result.years}a</div>
+              <div style={{ fontSize: '.82rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: parseFloat(result.totalReturn) >= 0 ? '#00ff88' : '#ff3355' }}>
+                {result.totalReturn}%
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 80, padding: '.4rem .5rem', borderRadius: 7, background: 'rgba(0,0,0,.2)', textAlign: 'center' }}>
+              <div style={{ fontSize: '.48rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Retorno Anual</div>
+              <div style={{ fontSize: '.82rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: parseFloat(result.annualReturn) >= 0 ? '#00ff88' : '#ff3355' }}>
+                {result.annualReturn}%
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 80, padding: '.4rem .5rem', borderRadius: 7, background: 'rgba(0,0,0,.2)', textAlign: 'center' }}>
+              <div style={{ fontSize: '.48rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>DY Real</div>
+              <div style={{ fontSize: '.82rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#10b981' }}>
+                {result.divYield > 0 ? result.divYield + '%' : '—'}
+              </div>
+            </div>
+          </div>
+
+          <button onClick={handleUse} style={{
+            padding: '.5rem', borderRadius: 8, fontSize: '.7rem', fontWeight: 800,
+            background: 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.4)',
+            color: '#10b981', cursor: 'pointer', width: '100%',
+          }}>
+            ▶ Usar no Simulador — Yield {result.yield}% · Crescimento {result.growth}%
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 const Dashboard = ({ onLogout }) => {
   const [news, setNews] = useState('');
@@ -55,6 +314,8 @@ const Dashboard = ({ onLogout }) => {
   const [marketRegime, setMarketRegime] = useState('NORMAL');
   const [toast, setToast] = useState(null);
   const [macroSignal, setMacroSignal] = useState(null);
+  const [searchedAsset, setSearchedAsset] = useState({ key: 'WIN', label: 'WIN Mini', icon: '📊', group: 'futuros' });
+  const [searchedAssetResult, setSearchedAssetResult] = useState(null);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -80,10 +341,6 @@ const Dashboard = ({ onLogout }) => {
       if (key === 'm') {
         setView('market');
         showToast('Visão Macro ativada (M)', 'info');
-      }
-      if (key === 's') {
-        setView('simulator');
-        showToast('Visão Simulador ativada (S)', 'info');
       }
       if (key === 'o') {
         setView('opportunities');
@@ -111,40 +368,16 @@ const Dashboard = ({ onLogout }) => {
   const [liveFeedSource, setLiveFeedSource] = useState('Simulado');
   const [macroSnapshot, setMacroSnapshot] = useState({ rateUSD: null, rateBRL: null, btcPrice: null, source: 'Local' });
 
+  // Simulator states
+  const [initialInvestment, setInitialInvestment]     = useState(10000);
+  const [monthlyContribution, setMonthlyContribution] = useState(500);
+  const [expectedYield, setExpectedYield]              = useState(8);
+  const [expectedGrowth, setExpectedGrowth]            = useState(12);
+  const [simYears, setSimYears]                        = useState(10);
+
   // Unified View State
   const [view, setView] = useState('market');
 
-  // Yield Simulation State
-  const [ygChartData, setYgChartData] = useState([]);
-  const [initialInvestment, setInitialInvestment] = useState(() => {
-    const saved = localStorage.getItem('yg_initial');
-    return saved ? Number(saved) : 10000;
-  });
-  const [monthlyContribution, setMonthlyContribution] = useState(() => {
-    const saved = localStorage.getItem('yg_monthly');
-    return saved ? Number(saved) : 1000;
-  });
-  const [expectedYield, setExpectedYield] = useState(() => {
-    const saved = localStorage.getItem('yg_yield');
-    return saved ? Number(saved) : 6;
-  });
-  const [expectedGrowth, setExpectedGrowth] = useState(() => {
-    const saved = localStorage.getItem('yg_growth');
-    return saved ? Number(saved) : 8;
-  });
-  const [years, setYears] = useState(() => {
-    const saved = localStorage.getItem('yg_years');
-    return saved ? Number(saved) : 15;
-  });
-
-  // Sync Yield state with localStorage
-  useEffect(() => {
-    localStorage.setItem('yg_initial', initialInvestment.toString());
-    localStorage.setItem('yg_monthly', monthlyContribution.toString());
-    localStorage.setItem('yg_yield', expectedYield.toString());
-    localStorage.setItem('yg_growth', expectedGrowth.toString());
-    localStorage.setItem('yg_years', years.toString());
-  }, [initialInvestment, monthlyContribution, expectedYield, expectedGrowth, years]);
 
   useEffect(() => {
     const loadMacroData = async () => {
@@ -163,13 +396,6 @@ const Dashboard = ({ onLogout }) => {
 
     loadMacroData();
   }, []);
-
-  const handleInjectAsset = (asset) => {
-    setExpectedYield(asset.yield);
-    setExpectedGrowth(asset.growth);
-    // Move to top of simulator
-    document.getElementById('estrategia')?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   const historyRef = useRef([]);
 
@@ -484,53 +710,19 @@ const Dashboard = ({ onLogout }) => {
       <main className="main-content container relative-z">
         {view === 'market' ? (
           <div className="market-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
-            <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ padding: '0.75rem', background: 'rgba(88, 166, 255, 0.1)', borderRadius: '12px', color: 'var(--accent-blue)' }}>
-                  <Activity size={28} />
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '1.6rem', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>Terminal de Macro Análise</h2>
-                  <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Monitoramento de sentimento global, eventos econômicos e fluxo de capital em tempo real.</p>
-                </div>
-              </div>
-              <div className="live-feed-banner">
-                <span
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                    padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700,
-                    background: liveFeedSource === 'Feed Simulado' ? 'rgba(251,191,36,0.12)' : 'rgba(0,255,136,0.10)',
-                    border: `1px solid ${liveFeedSource === 'Feed Simulado' ? 'rgba(251,191,36,0.35)' : 'rgba(0,255,136,0.35)'}`,
-                    color: liveFeedSource === 'Feed Simulado' ? '#fbbf24' : '#00ff88',
-                  }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 2s infinite' }}></span>
-                  {liveFeedSource === 'Feed Simulado' ? 'SIMULADO' : 'AO VIVO'}
-                </span>
-                <strong style={{ fontSize: '0.8rem' }}>{liveFeedSource}</strong>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Atualiza a cada 25s</span>
-              </div>
-              <div className="market-data-banner">
-                <span>USD/BRL: <strong>{macroSnapshot.rateUSD ? macroSnapshot.rateUSD.toFixed(4) : '--'}</strong></span>
-                <span>BITCOIN: <strong>{macroSnapshot.btcPrice ? `$${macroSnapshot.btcPrice.toFixed(2)}` : '--'}</strong></span>
-                <span>Fonte: <strong>{macroSnapshot.source}</strong></span>
-              </div>
-            </div>
 
-            {lastAlert && lastAlert !== 'IGNORAR' && (
-              <MarketPulse
-                lastAlert={lastAlert}
-                correlation={correlation}
-                marketRegime={marketRegime}
-                currentWin={winPrice}
-                currentDolar={dolarPrice}
-              />
-            )}
+            <DayDirection macroSignal={macroSignal} lastAlert={lastAlert} asset={searchedAsset} assetResult={searchedAssetResult} />
 
-            <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} />
+            <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} lastAlert={lastAlert} asset={searchedAsset} />
+
+            <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} />
+
+            <TechAnalysisBot onAssetChange={setSearchedAsset} onResult={setSearchedAssetResult} />
+
+            <BankPositions macroSignal={macroSignal} asset={searchedAsset} />
 
             <SignalPanel macroSignal={macroSignal} lastAlert={lastAlert} />
 
-            <TradingViewCharts />
             <div className="layout-grid">
               <div className="left-panel">
                 <NewsInput 
@@ -544,99 +736,11 @@ const Dashboard = ({ onLogout }) => {
                 {lastAlert && lastAlert !== 'IGNORAR' && (
                   <MacroAlert alert={lastAlert} />
                 )}
-                <EconomicCalendar />
-                <FlowRadar lastAlert={lastAlert} correlation={correlation} />
-                <SentimentHeatmap lastAlert={lastAlert} />
-                <TradingPanel 
-                  balance={balance} 
-                  positions={positions} 
-                  activeTicker={activeTicker} 
-                  activePrice={activeTickerPrice}
-                  onTrade={handleTrade}
-                  suggestion={lastAlert?.tradeReading}
-                />
-                <RiskCalculator />
-                <CryptoScanner
-                  lastAlert={lastAlert}
-                  activeTicker={activeTicker}
-                  onSelectCrypto={handleSelectCrypto}
-                />
               </div>
               <div className="right-panel">
                 <History history={history} />
               </div>
             </div>
-          </div>
-        ) : view === 'simulator' ? (
-          <div className="simulation-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
-            <div className="page-header" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(22, 27, 34, 0.4)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-               <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                 <TrendingUp size={28} />
-               </div>
-               <div>
-                 <h2 style={{ fontSize: '1.6rem', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>Simulador de Crescimento (Yield)</h2>
-                 <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Projeções matemáticas de longo prazo baseadas em dividendos e efeito bola de neve.</p>
-               </div>
-            </div>
-
-             <div className="dashboard-grid" style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'minmax(350px, 400px) 1fr', 
-              gap: '2rem', 
-              marginBottom: '2rem' 
-            }}>
-              <YieldSimulator 
-                onUpdate={setYgChartData}
-                initialInvestment={initialInvestment}
-                setInitialInvestment={setInitialInvestment}
-                monthlyContribution={monthlyContribution}
-                setMonthlyContribution={setMonthlyContribution}
-                expectedYield={expectedYield}
-                setExpectedYield={setExpectedYield}
-                expectedGrowth={expectedGrowth}
-                setExpectedGrowth={setExpectedGrowth}
-                years={years}
-                setYears={setYears}
-              />
-              
-              <div className="analysis-panels" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <div className="glass-panel" style={{ padding: '2rem', flex: 1, minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <TrendingUp color="var(--primary)" />
-                      <h3 style={{ fontSize: '1.4rem' }}>Projeção de Longo Prazo</h3>
-                    </div>
-                  </div>
-                  
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <ResultCharts data={ygChartData} />
-                  </div>
-                </div>
-
-                <div className="insights-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                  <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                      <PieChart color="var(--accent)" size={20} />
-                      <h3 style={{ fontSize: '1.1rem' }}>Efeito Snowball</h3>
-                    </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      A rentabilidade real sobre o valor investido cresce exponencialmente com o tempo.
-                    </p>
-                  </div>
-
-                  <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                      <Activity color="var(--primary)" size={20} />
-                      <h3 style={{ fontSize: '1.1rem' }}>Consistência</h3>
-                    </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      Aportes mensais são o motor da sua independência financeira.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <StockInsights onInject={handleInjectAsset} />
           </div>
         ) : view === 'opportunities' ? (
           <div className="opportunities-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
@@ -650,6 +754,31 @@ const Dashboard = ({ onLogout }) => {
               </div>
             </div>
             <OpportunityScanner />
+          </div>
+        ) : view === 'simulator' ? (
+          <div className="animate-fade-in" style={{ animationDuration: '0.4s', padding: '1.5rem 0' }}>
+            <SimSearchBar
+              onSelect={(stock) => {
+                setExpectedYield(stock.yield);
+                setExpectedGrowth(stock.growth);
+              }}
+            />
+            <YieldSimulator
+              onUpdate={() => {}}
+              initialInvestment={initialInvestment} setInitialInvestment={setInitialInvestment}
+              monthlyContribution={monthlyContribution} setMonthlyContribution={setMonthlyContribution}
+              expectedYield={expectedYield} setExpectedYield={setExpectedYield}
+              expectedGrowth={expectedGrowth} setExpectedGrowth={setExpectedGrowth}
+              years={simYears} setYears={setSimYears}
+            />
+          </div>
+        ) : view === 'report' ? (
+          <div className="animate-fade-in" style={{ animationDuration: '0.4s', maxWidth: 900, margin: '0 auto', padding: '1.5rem 0' }}>
+            <DailyReport asset={searchedAsset} assetResult={searchedAssetResult} />
+          </div>
+        ) : view === 'config' ? (
+          <div className="animate-fade-in" style={{ animationDuration: '0.4s', maxWidth: 720, margin: '0 auto', padding: '1.5rem 0' }}>
+            <BrokerConfig />
           </div>
         ) : null}
       </main>

@@ -1,0 +1,95 @@
+// CCI Strategy - Otimizado para 5 minutos (M5)
+// Ajustes: média do CCI levemente maior, confirmação de sinal e stops menores
+
+input
+    periodoCCI(14);
+    periodoMM(5);     // suavização do CCI - mais apropriado para M5
+    TipoMM(1);
+
+    gatilhoEntradaC(170); // considerar valor positivo, usamos -gatilhoEntradaC
+    gatilhoEntradaV(100);
+
+    gatilhoStopC(120);   // reduzido (era 170)
+    gatilhoStopV(70);    // reduzido (era 100)
+
+var
+    virCCI, mmCCI : Real;
+    sinalC, sinalV : Booleano;
+    stopC, stopV : Booleano;
+    tendenciaAlta, tendenciaBaixa : Booleano;
+    cor : Inteiro;
+
+begin
+    // Observação: use este script em gráfico de 5 minutos (M5)
+
+    // CARREGAR INDICADOR
+    virCCI := CCI(periodoCCI);
+
+    // MÉDIA MÓVEL DO CCI (sinal suavizado)
+    se (TipoMM = 1) entao
+        mmCCI := Media(periodoMM, virCCI)
+    senao se (TipoMM = 2) entao
+        mmCCI := MediaExp(periodoMM, virCCI);
+
+    // FILTRO DE TENDÊNCIA (preço vs média de 50)
+    tendenciaAlta := Close > Media(50, Close);
+    tendenciaBaixa := Close < Media(50, Close);
+
+    // SINAIS DE ENTRADA (cruzamento do nível, não permanência)
+    sinalC := (mmCCI[1] > -gatilhoEntradaC) e (mmCCI <= -gatilhoEntradaC) and tendenciaAlta;
+    sinalV := (mmCCI[1] < gatilhoEntradaV) e (mmCCI >= gatilhoEntradaV) and tendenciaBaixa;
+
+    // SINAIS DE STOP (mais próximos, exigir persistência 2 barras para reduzir whipsaw)
+    stopC := (mmCCI >= gatilhoStopC) and (mmCCI[1] >= gatilhoStopC);
+    stopV := (mmCCI <= -gatilhoStopV) and (mmCCI[1] <= -gatilhoStopV);
+
+    // EXECUÇÃO DE ENTRADA (se estiver usando só sinal visual, comente as linhas de execução)
+    se (sinalC) e (not IsBought) e (not IsSold) entao
+        BuyAtMarket;
+
+    se (sinalV) e (not IsBought) e (not IsSold) entao
+        SellShortAtMarket;
+
+    // EXECUÇÃO DE SAÍDA
+    se (IsBought) e (stopC) entao
+        SellToCoverAtMarket;
+
+    se (IsSold) e (stopV) entao
+        BuyToCoverAtMarket;
+
+    // COLORAÇÃO
+    se sinalC entao
+        cor := clLime
+    senao se sinalV entao
+        cor := clRed
+    senao
+        cor := clWhite;
+
+    se (cor[1] = clLime) e (not stopC) entao
+        cor := clLime;
+
+    se (cor[1] = clRed) e (not stopV) entao
+        cor := clRed;
+
+    PaintBar(cor);
+
+    // PLOTAGEM
+    Plot(virCCI);
+    SetPlotType(1, 1);
+
+    Plot2(mmCCI);
+    SetPlotColor(2, clBlue);
+
+    // GATILHOS (níveis visuais)
+    Plot3(-gatilhoEntradaC);
+    SetPlotColor(3, clLime);
+
+    Plot4(gatilhoStopC);
+    SetPlotColor(4, clFuchsia);
+
+    Plot5(gatilhoEntradaV);
+    SetPlotColor(5, clRed);
+
+    Plot6(-gatilhoStopV);
+    SetPlotColor(6, clBlue);
+end;
