@@ -7,6 +7,7 @@ import OpportunityScanner from './OpportunityScanner';
 import WinAnalysis from './WinAnalysis';
 import SignalPanel from './SignalPanel';
 import DayDirection from './DayDirection';
+import MarketCharts from './MarketCharts';
 import TradeGuide from './TradeGuide';
 import TechAnalysisBot from './TechAnalysisBot';
 import BankPositions from './BankPositions';
@@ -318,6 +319,7 @@ const Dashboard = ({ onLogout }) => {
   const [searchedAsset, setSearchedAsset] = useState({ key: 'WIN', label: 'WIN Mini', icon: '📊', group: 'futuros' });
   const [searchedAssetResult, setSearchedAssetResult] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
+  const [showCharts, setShowCharts] = useState(false);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -726,6 +728,24 @@ const Dashboard = ({ onLogout }) => {
 
             <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} lastAlert={lastAlert} asset={searchedAsset} />
 
+            <div className="charts-toggle-wrap">
+              <button className="charts-toggle-btn" onClick={() => setShowCharts(v => !v)}>
+                {showCharts ? 'Ocultar gráficos de preço ▲' : '📈 Ver gráficos de preço (WIN, Dólar, Sentimento) ▼'}
+              </button>
+            </div>
+            {showCharts && (
+              <MarketCharts
+                data={chartData}
+                currentWin={winPrice}
+                currentDolar={dolarPrice}
+                activeTicker={activeTicker}
+                activePrice={activeTickerPrice}
+                positions={positions}
+                lastAlert={lastAlert}
+                direction={macroSignal?.direction}
+              />
+            )}
+
             <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} opportunities={opportunities} />
 
             <TechAnalysisBot onAssetChange={setSearchedAsset} onResult={setSearchedAssetResult} />
@@ -795,6 +815,14 @@ const Dashboard = ({ onLogout }) => {
       </main>
 
       <style jsx="true">{`
+        .charts-toggle-wrap { margin-bottom: 1rem; }
+        .charts-toggle-btn {
+          width: 100%; font-size: .68rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.03); border: 1px solid rgba(99,149,255,.15);
+          border-radius: 10px; padding: .6rem .8rem; cursor: pointer; transition: all .15s;
+        }
+        .charts-toggle-btn:hover { background: rgba(255,255,255,.06); color: var(--text-secondary); }
+
         .dashboard {
           flex: 1;
           display: flex;

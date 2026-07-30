@@ -409,11 +409,14 @@ const calcOrdem = (res, saldo, contratosManual) => {
 const TechAnalysisBot = ({ onAssetChange, onResult }) => {
   const [assetKey, setAsset]    = useState(() => {
     const saved = localStorage.getItem('tab_asset');
-    const b3Open = isB3Open();
-    const savedIsCrypto = saved && (saved.endsWith('USDT') || saved.endsWith('BTC'));
-    // B3 fechada e o ativo salvo é futuro/ação (preso ao horário da bolsa) → cai pro modo cripto 24h
-    if (saved && (b3Open || savedIsCrypto)) return saved;
-    return b3Open ? 'WIN' : 'BTCUSDT';
+    const savedWasAuto = localStorage.getItem('tab_asset_auto') === '1';
+    // Se a última escolha foi automática (modo 24h), recalcula com base no horário atual
+    // em vez de ficar presa no valor salvo — só respeita o valor salvo se foi escolha manual.
+    if (saved && !savedWasAuto) return saved;
+    const autoKey = isB3Open() ? 'WIN' : 'BTCUSDT';
+    localStorage.setItem('tab_asset', autoKey);
+    localStorage.setItem('tab_asset_auto', '1');
+    return autoKey;
   });
   const [searchTicker, setSearchTicker] = useState('');
   const [openPanel, setOpenPanel] = useState(null); // 'acoes' | 'cripto' | null
@@ -666,7 +669,11 @@ const TechAnalysisBot = ({ onAssetChange, onResult }) => {
     onResult?.(res);
   }, [res]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectTicker = (key) => { setAsset(key); setRes(null); setSearchTicker(''); localStorage.setItem('tab_asset', key); };
+  const selectTicker = (key) => {
+    setAsset(key); setRes(null); setSearchTicker('');
+    localStorage.setItem('tab_asset', key);
+    localStorage.setItem('tab_asset_auto', '0'); // escolha manual — não deve ser sobrescrita pelo modo 24h
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

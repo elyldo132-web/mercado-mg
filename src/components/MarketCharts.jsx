@@ -78,12 +78,16 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePrice, positions, lastAlert }) => {
+const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePrice, positions, lastAlert, direction }) => {
   const suggestedEntryLine = lastAlert && activeTicker && (lastAlert.tradeAction === 'Compra' || lastAlert.tradeAction === 'Venda')
     ? activePrice
     : null;
   const suggestedLineColor = lastAlert?.tradeAction === 'Compra' ? 'var(--accent-green)' : 'var(--accent-red)';
   const suggestedLineLabel = lastAlert?.tradeAction ? `${lastAlert.tradeAction} sugerida` : '';
+
+  // Cor do WIN segue o sentimento consolidado; DOL segue invertido (dólar sobe quando bolsa cai)
+  const winColor = direction === 'COMPRA' ? '#00ff88' : direction === 'VENDA' ? '#ff3355' : '#00f5d4';
+  const dolColor = direction === 'COMPRA' ? '#ff3355' : direction === 'VENDA' ? '#00ff88' : 'var(--accent-gold)';
   
   const calculateChange = (key) => {
     if (data.length < 2) return 0;
@@ -197,7 +201,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                 yAxisId="left"
                 type="monotone"
                 dataKey="win"
-                stroke="#00f5d4"
+                stroke={winColor}
                 strokeWidth={2}
                 dot={false}
                 animationDuration={800}
@@ -206,7 +210,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                 yAxisId="right"
                 type="monotone"
                 dataKey="dolar"
-                stroke="var(--accent-gold)"
+                stroke={dolColor}
                 strokeWidth={2}
                 dot={false}
                 animationDuration={800}
@@ -214,8 +218,8 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
             </LineChart>
           </ResponsiveContainer>
           <div className="dual-legend font-mono">
-            <span style={{ color: '#00f5d4' }}>● WIN</span>
-            <span style={{ color: 'var(--accent-gold)' }}>● USD/BRL</span>
+            <span style={{ color: winColor }}>● WIN</span>
+            <span style={{ color: dolColor }}>● USD/BRL</span>
           </div>
         </div>
       </div>
@@ -238,22 +242,25 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                 <XAxis dataKey="time" hide />
                 <YAxis domain={['auto', 'auto']} hide />
                 <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                <Area 
+                <Area
                   type="monotone"
-                  dataKey="win" 
-                  stroke="#00f5d4" 
+                  dataKey="win"
+                  stroke={winColor}
                   fillOpacity={0.1}
-                  fill="#00f5d4"
+                  fill={winColor}
                   strokeWidth={2}
+                  dot={<SignalDot signalType="winSignal" />}
                   isAnimationActive={false}
                 />
-                <Line type="monotone" dataKey="win_ema" stroke="rgba(0, 245, 212, 0.4)" strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
+                <Line type="monotone" dataKey="win_ema" stroke={winColor} strokeOpacity={0.4} strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
                 <Line type="monotone" dataKey="win_vwap" stroke="#f15bb5" strokeWidth={1.5} dot={false} strokeOpacity={0.7} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="indicator-legend">
               <span className="leg-item"><span className="dot ema"></span> EMA 5</span>
               <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
+              <span className="leg-item signal-leg">▲ Compra</span>
+              <span className="leg-item signal-leg sell">▼ Venda</span>
             </div>
           </div>
         </div>
@@ -275,22 +282,25 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                 <XAxis dataKey="time" hide />
                 <YAxis domain={['auto', 'auto']} hide />
                 <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                <Area 
+                <Area
                   type="monotone"
-                  dataKey="dolar" 
-                  stroke="var(--accent-gold)" 
+                  dataKey="dolar"
+                  stroke={dolColor}
                   fillOpacity={0.1}
-                  fill="var(--accent-gold)"
+                  fill={dolColor}
                   strokeWidth={2}
+                  dot={<SignalDot signalType="dolarSignal" />}
                   isAnimationActive={false}
                 />
-                <Line type="monotone" dataKey="dolar_ema" stroke="rgba(251, 191, 36, 0.4)" strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
+                <Line type="monotone" dataKey="dolar_ema" stroke={dolColor} strokeOpacity={0.4} strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
                 <Line type="monotone" dataKey="dolar_vwap" stroke="#f15bb5" strokeWidth={1.5} dot={false} strokeOpacity={0.7} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
             <div className="indicator-legend">
               <span className="leg-item"><span className="dot ema-gold"></span> EMA 5</span>
               <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
+              <span className="leg-item signal-leg">▲ Compra</span>
+              <span className="leg-item signal-leg sell">▼ Venda</span>
             </div>
           </div>
         </div>
@@ -454,6 +464,8 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
         .ema { background: rgba(0, 245, 212, 0.3); border: 1px dashed var(--accent-green); }
         .ema-gold { background: rgba(251, 191, 36, 0.3); border: 1px dashed var(--accent-gold); }
         .vwap { background: #f15bb5; }
+        .signal-leg { color: var(--accent-green); }
+        .signal-leg.sell { color: var(--accent-red); }
 
         .separator { color: var(--border-color); }
 
