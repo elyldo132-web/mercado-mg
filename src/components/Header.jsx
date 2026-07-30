@@ -2,9 +2,11 @@ import React from 'react';
 
 const Header = ({ isMuted, toggleMute, correlation, marketRegime, onLogout, balance, view, setView }) => {
   const navTabs = [
-    { id: 'market',        label: 'Macro Análise',        icon: '🌍', color: '#58a6ff' },
-    { id: 'opportunities', label: 'Oportunidades',         icon: '⚡', color: '#a855f7' },
-    { id: 'simulator',     label: 'Simulador',             icon: '📈', color: '#10b981' },
+    { id: 'market',        label: 'Macro Análise',  icon: '🌍', color: '#58a6ff' },
+    { id: 'opportunities', label: 'Oportunidades',  icon: '⚡', color: '#a855f7' },
+    { id: 'simulator',     label: 'Simulador',       icon: '📈', color: '#10b981' },
+    { id: 'report',        label: 'Relatório',       icon: '📋', color: '#f97316' },
+    { id: 'config',        label: 'Corretoras',      icon: '⚙️', color: '#fbbf24' },
   ];
 
   return (

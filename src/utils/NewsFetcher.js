@@ -1,64 +1,72 @@
 /**
  * NewsFetcher — Mercado MG
- * Fontes (em ordem de prioridade):
- *  1. Google News RSS  — mercado financeiro Brasil (gratuito, sem chave)
+ * Fontes oficiais (em ordem de prioridade):
+ *  1. Google News RSS  — mercado financeiro Brasil
  *  2. InfoMoney RSS    — notícias financeiras BR
- *  3. Valor Econômico RSS
- *  4. Pool simulado    — fallback quando todas as fontes falham
+ *  3. Valor Econômico RSS — Globo
+ *  4. Google News Cripto — bitcoin e criptomoedas
+ *  5. CoinGecko API    — preço + tendência cripto (sem proxy)
  */
 
-const CORS = 'https://api.allorigins.win/raw?url=';
-const CORS2 = 'https://corsproxy.io/?';
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
 
 const RSS_SOURCES = [
   {
     name: 'Google News BR',
     url: 'https://news.google.com/rss/search?q=mercado+financeiro+ibovespa+bolsa+selic&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-    proxy: CORS,
     parse: parseGoogleRSS,
   },
   {
     name: 'InfoMoney',
     url: 'https://www.infomoney.com.br/feed/',
-    proxy: CORS,
     parse: parseGenericRSS,
   },
   {
     name: 'Valor Econômico',
-    url: 'https://valor.globo.com/financas/rss',
-    proxy: CORS2,
+    url: 'https://valor.globo.com/rss/financas/',
     parse: parseGenericRSS,
   },
   {
-    name: 'Google News Cripto BR',
+    name: 'Google News Cripto',
     url: 'https://news.google.com/rss/search?q=bitcoin+ethereum+cripto+brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-    proxy: CORS,
     parse: parseGoogleRSS,
+  },
+  {
+    name: 'Investing.com BR',
+    url: 'https://br.investing.com/rss/news.rss',
+    parse: parseGenericRSS,
   },
 ];
 
-const FALLBACK_POOL = [
-  'Banco Central do Brasil sinaliza manutenção da taxa Selic em reunião do Copom. Mercado aguarda definição de política monetária.',
-  'FED indica que inflação persistente nos EUA pode atrasar corte de juros. Dólar global se fortalece.',
-  'NVIDIA reporta lucros recordes e impulsiona narrativas de Inteligência Artificial em mercados globais.',
-  'BlackRock aumenta exposição em RWA através de novo fundo tokenizado na rede Ethereum.',
-  'Baleia de Bitcoin movimenta 5.000 BTC após 10 anos de inatividade, gerando especulação de alta.',
-  'Relatório de Emprego (Payroll) dos EUA supera projeções. Mercado revisa expectativas de juros.',
-  'Petróleo Brent sobe com tensões no Oriente Médio. Commodities energéticas em alta.',
-  'IPCA-15 registra variação levemente abaixo do consenso do mercado. Desinflação em curso.',
-  'Proposta de ETF de Solana nos EUA ganha força com interesse institucional crescente.',
-  'Tensão geopolítica aumenta e investidores buscam refúgio em títulos do Tesouro americano.',
-  'Dólar (DXY) se fortalece contra moedas emergentes após dados fortes de varejo nos EUA.',
-  'Fitch mantém perspectiva estável para o Brasil após revisão positiva do crescimento do PIB.',
-  'Ouro reage à expectativa de cortes de juros nos EUA. Commodity sobe para máxima histórica.',
-  'Fluxo estrangeiro para corretoras brasileiras avança com otimismo no setor de commodities.',
-  'Ibovespa supera resistência em ambiente de liquidez global favorável a emergentes.',
-  'IPCA anualizado fica dentro da meta do Banco Central, abrindo espaço para política expansiva.',
-  'Minério de ferro sobe na China, favorecendo ações de empresas do setor de metais na B3.',
-  'Vale e Petrobras lideram alta do Ibovespa com recuperação de commodities globais.',
-  'Tesouro Direto registra captação recorde em meio à busca por proteção contra inflação.',
-  'Resultado primário do governo sinaliza melhora fiscal e reduz prêmio de risco do Brasil.',
-];
+// ── CoinGecko (sem proxy, API pública) ─────────────────────────────────────
+
+async function fetchCoinGeckoNews() {
+  const r = await fetch(
+    'https://api.coingecko.com/api/v3/search/trending',
+    { cache: 'no-store', signal: AbortSignal.timeout(8000) }
+  );
+  if (!r.ok) throw new Error(`CoinGecko HTTP ${r.status}`);
+  const data = await r.json();
+  const coins = data?.coins || [];
+  if (!coins.length) throw new Error('Sem dados CoinGecko');
+  return coins.slice(0, 8).map(c => {
+    const item = c.item;
+    const price = item.data?.price ? `$${parseFloat(item.data.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '';
+    const change = item.data?.price_change_percentage_24h?.usd;
+    const dir = change > 0 ? '📈' : change < 0 ? '📉' : '➖';
+    const pct = change != null ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : '';
+    return {
+      text: `${dir} ${item.name} (${item.symbol?.toUpperCase()}) ${price} ${pct} — Trending #${item.score + 1} no CoinGecko`,
+      source: 'CoinGecko',
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    };
+  });
+}
 
 // ── RSS parsers ───────────────────────────────────────────────────────────────
 
@@ -70,12 +78,10 @@ function parseGoogleRSS(xmlText) {
     const block = match[1];
     const title = (/<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(block) ||
                    /<title>(.*?)<\/title>/.exec(block) || [])[1] || '';
-    const desc  = (/<description><!\[CDATA\[(.*?)\]\]><\/description>/.exec(block) ||
-                   /<description>(.*?)<\/description>/.exec(block) || [])[1] || '';
     const pub   = (/<pubDate>(.*?)<\/pubDate>/.exec(block) || [])[1] || '';
-    const clean = (s) => s.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
+    const source = (/<source[^>]*>(.*?)<\/source>/.exec(block) || [])[1] || 'Google News';
     const text  = clean(title);
-    if (text.length > 20) items.push({ text, source: 'Google News BR', time: pub ? new Date(pub).toLocaleTimeString('pt-BR') : null });
+    if (text.length > 20) items.push({ text, source, time: pub ? new Date(pub).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null });
   }
   return items;
 }
@@ -89,24 +95,27 @@ function parseGenericRSS(xmlText) {
     const title = (/<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(block) ||
                    /<title>(.*?)<\/title>/.exec(block) || [])[1] || '';
     const pub   = (/<pubDate>(.*?)<\/pubDate>/.exec(block) || [])[1] || '';
-    const clean = (s) => s.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
     const text  = clean(title);
-    if (text.length > 20) items.push({ text, time: pub ? new Date(pub).toLocaleTimeString('pt-BR') : null });
+    if (text.length > 20) items.push({ text, time: pub ? new Date(pub).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null });
   }
   return items;
 }
 
-// ── Fetch a single RSS source ─────────────────────────────────────────────────
+const clean = (s) => s.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
+
+// ── Fetch a single RSS source (tenta todos os proxies) ───────────────────────
 
 async function fetchRSSSource(src) {
-  const encoded = encodeURIComponent(src.url);
-  const proxyUrl = `${src.proxy}${encoded}`;
-  const res = await fetch(proxyUrl, { cache: 'no-store', signal: AbortSignal.timeout(7000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const xml   = await res.text();
-  const items = src.parse(xml);
-  if (!items.length) throw new Error('Nenhum item no feed');
-  return { items, name: src.name };
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy(src.url), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const xml   = await res.text();
+      const items = src.parse(xml);
+      if (items.length) return { items, name: src.name };
+    } catch { /* tenta próximo proxy */ }
+  }
+  throw new Error(`Todos os proxies falharam para ${src.name}`);
 }
 
 // ── Main fetcher ──────────────────────────────────────────────────────────────
@@ -115,28 +124,52 @@ let lastItems = [];
 let sourceIdx = 0;
 
 const fetchLiveNews = async () => {
-  // Rotate sources to spread load
   const attempts = [...RSS_SOURCES.slice(sourceIdx), ...RSS_SOURCES.slice(0, sourceIdx)];
   sourceIdx = (sourceIdx + 1) % RSS_SOURCES.length;
 
+  // Tenta RSS
   for (const src of attempts) {
     try {
       const { items, name } = await fetchRSSSource(src);
       lastItems = items;
-      // Pick a random recent item
       const pick = items[Math.floor(Math.random() * Math.min(items.length, 8))];
       return {
         text:   pick.text,
-        source: name,
-        time:   pick.time || new Date().toLocaleTimeString('pt-BR'),
+        source: pick.source || name,
+        time:   pick.time || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         live:   true,
       };
     } catch (err) {
       console.warn(`[NewsFetcher] ${src.name} falhou:`, err.message);
     }
   }
+
+  // Fallback: CoinGecko (sem proxy)
+  try {
+    const coins = await fetchCoinGeckoNews();
+    if (coins.length) {
+      const pick = coins[Math.floor(Math.random() * coins.length)];
+      return { ...pick, live: true };
+    }
+  } catch (err) {
+    console.warn('[NewsFetcher] CoinGecko falhou:', err.message);
+  }
+
   throw new Error('Todas as fontes falharam');
 };
+
+// ── Fallback Pool (ÚLTIMO recurso, claramente marcado) ───────────────────────
+
+const FALLBACK_POOL = [
+  'Banco Central do Brasil sinaliza manutenção da taxa Selic em reunião do Copom.',
+  'FED indica que inflação persistente nos EUA pode atrasar corte de juros.',
+  'Relatório de Emprego (Payroll) dos EUA supera projeções. Mercado revisa expectativas.',
+  'IPCA-15 registra variação abaixo do consenso. Desinflação em curso no Brasil.',
+  'Dólar se fortalece contra moedas emergentes após dados fortes de varejo nos EUA.',
+  'Ouro atinge máxima histórica com expectativa de cortes de juros globais.',
+  'Minério de ferro sobe na China, favorecendo setor de metais na B3.',
+  'Fluxo estrangeiro avança para bolsas emergentes com otimismo em commodities.',
+];
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -149,9 +182,8 @@ export const startNewsFeed = (onNewNews) => {
       const item = await fetchLiveNews();
       if (running) onNewNews(item);
     } catch {
-      // All live sources failed → fallback pool
-      const text  = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
-      if (running) onNewNews({ text, source: 'Feed Simulado', time: new Date().toLocaleTimeString('pt-BR'), live: false });
+      const text = FALLBACK_POOL[Math.floor(Math.random() * FALLBACK_POOL.length)];
+      if (running) onNewNews({ text, source: '⚠️ Offline (simulado)', time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), live: false });
     }
   };
 

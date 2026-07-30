@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ── Macro scoring functions ──────────────────────────────────────────────────
 
@@ -45,17 +45,89 @@ const scoreCommodities = (ibovChange) => {
 };
 
 const WEIGHTS = {
-  selic:       0.28,
-  selicTrend:  0.18,
-  ipca:        0.18,
-  usdBrl:      0.18,
-  commodities: 0.10,
-  fiscal:      0.05,
-  globalRisk:  0.03,
+  selic:        0.24,
+  selicTrend:   0.15,
+  ipca:         0.14,
+  usdBrl:       0.16,
+  commodities:  0.10,
+  geopolitical: 0.12,
+  fiscal:       0.05,
+  globalRisk:   0.04,
 };
 
 const FISCAL_DEFAULT = { score: -12, status: 'DÉFICIT PRIMÁRIO', color: '#fbbf24' };
-const GLOBAL_DEFAULT = { score:  +4, status: 'MISTO',            color: '#6395ff' };
+const GLOBAL_DEFAULT = { score: -5,  status: 'S&P NEUTRO / VIX MODERADO', color: '#6395ff' };
+
+// Geopolítica: score dinâmico baseado na última notícia analisada
+const scoreGeopolitical = (alert) => {
+  if (!alert || alert === 'IGNORAR') return { score: -5, status: 'INCERTO', color: '#fbbf24' };
+  const drivers = Array.isArray(alert.drivers) ? alert.drivers : [];
+  const sector  = alert.sector  || '';
+  const impact  = alert.impact  || {};
+  const action  = alert.tradeAction || '';
+  if (sector === 'Geopolítica' || drivers.includes('Segurança') || drivers.includes('Geopolítica'))
+    return { score: -28, status: 'TENSÃO GLOBAL',   color: '#ff3355' };
+  if (impact.win === 'Alta'  && action === 'Compra') return { score: +18, status: 'FLUXO POSITIVO', color: '#00ff88' };
+  if (impact.win === 'Queda' && action === 'Venda')  return { score: -18, status: 'FLUXO NEGATIVO', color: '#f97316' };
+  if (sector === 'Commodities' && impact.win === 'Alta') return { score: +12, status: 'COMMODITIES +', color: '#4ade80' };
+  if (action === 'Venda')  return { score: -10, status: 'ADVERSO',   color: '#fbbf24' };
+  if (action === 'Compra') return { score: +10, status: 'FAVORÁVEL', color: '#4ade80' };
+  return { score: -5, status: 'NEUTRO', color: '#6395ff' };
+};
+
+// ── Compass gauge SVG ───────────────────────────────────────────────────────
+
+const CompassGauge = ({ score, direction, maxScore = 38 }) => {
+  const clamped = Math.max(-maxScore, Math.min(maxScore, score));
+  const angle   = (clamped / maxScore) * 82;
+  const cx = 100, cy = 90, r = 70;
+  const { color, glow } = direction;
+  return (
+    <svg viewBox="0 0 200 130" style={{ width: '100%', maxWidth: '270px', display: 'block', margin: '0 auto', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="gWin" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#ff3355"/>
+          <stop offset="28%"  stopColor="#f97316"/>
+          <stop offset="50%"  stopColor="#fbbf24"/>
+          <stop offset="72%"  stopColor="#4ade80"/>
+          <stop offset="100%" stopColor="#00ff88"/>
+        </linearGradient>
+        <filter id="nGlw">
+          <feGaussianBlur stdDeviation="3" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      {/* Track */}
+      <path d={`M ${cx-r},${cy} A ${r},${r} 0 0,1 ${cx+r},${cy}`}
+        fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="18" strokeLinecap="round"/>
+      {/* Colored arc */}
+      <path d={`M ${cx-r},${cy} A ${r},${r} 0 0,1 ${cx+r},${cy}`}
+        fill="none" stroke="url(#gWin)" strokeWidth="13" strokeLinecap="round" opacity="0.8"/>
+      {/* Center tick */}
+      <line x1={cx} y1={cy-r-7} x2={cx} y2={cy-r+5}
+        stroke="rgba(255,255,255,0.3)" strokeWidth="2"/>
+      {/* Needle group */}
+      <g transform={`rotate(${angle}, ${cx}, ${cy})`} filter="url(#nGlw)">
+        <line x1={cx} y1={cy+12} x2={cx} y2={cy-r+13} stroke={color} strokeWidth="3" strokeLinecap="round"/>
+        <polygon points={`${cx},${cy-r+9} ${cx-5},${cy-r+21} ${cx+5},${cy-r+21}`} fill={color}/>
+      </g>
+      {/* Hub */}
+      <circle cx={cx} cy={cy} r="9" fill="#0a0d14" stroke={color} strokeWidth="2.5"/>
+      <circle cx={cx} cy={cy} r="3.5" fill={color}/>
+      {/* Labels */}
+      <text x="22"  y="107" fontSize="8" fill="#ff3355cc" textAnchor="middle" fontWeight="800" fontFamily="system-ui">QUEDA</text>
+      <text x="100" y="28"  fontSize="7" fill="rgba(255,255,255,0.3)" textAnchor="middle" fontFamily="system-ui">NEUTRO</text>
+      <text x="178" y="107" fontSize="8" fill="#00ff88cc" textAnchor="middle" fontWeight="800" fontFamily="system-ui">ALTA</text>
+      {/* Score */}
+      <text x={cx} y="118" fontSize="15" fill={color} textAnchor="middle" fontWeight="900" fontFamily="monospace">
+        {score > 0 ? '+' : ''}{score}
+      </text>
+      <text x={cx} y="128" fontSize="7" fill="rgba(255,255,255,0.3)" textAnchor="middle" fontFamily="system-ui">
+        SCORE MACRO
+      </text>
+    </svg>
+  );
+};
 
 const getDirection = (t) => {
   if (t >=  40) return { dir: 'COMPRA', strength: 'FORTE',    color: '#00ff88', icon: '▲▲', glow: 'rgba(0,255,136,.4)' };
@@ -110,14 +182,21 @@ const buildSetup = (ibov, total, direction) => {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
+const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) => {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [ts, setTs]           = useState(null);
-  const [ibov, setIbov]       = useState(currentWin || 135000);
+  const [showFactors, setShowFactors] = useState(false);
+
+  // Controle interno
+  const lastAlertRef  = useRef(lastAlert);
+  const hasLoadedOnce = useRef(false);
+  const prevIbovRef   = useRef(null);
+  const macroKeyRef   = useRef(null);
+  useEffect(() => { lastAlertRef.current = lastAlert; }, [lastAlert]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Só mostra spinner na primeira carga — atualizações seguintes são silenciosas
+    if (!hasLoadedOnce.current) setLoading(true);
     try {
       const [selicRes, ipcaRes, fxRes, ibovRes] = await Promise.allSettled([
         fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/2?formato=json').then(r => r.json()),
@@ -148,15 +227,16 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
 
       // ── IBOV
       let ibovPrice = currentWin || 135000;
-      let ibovChange = null;
+      let ibovChangePct = null;
       if (ibovRes.status === 'fulfilled') {
         const r = ibovRes.value?.results?.[0];
         if (r?.regularMarketPrice) {
-          ibovPrice  = r.regularMarketPrice;
-          ibovChange = r.regularMarketChangePercent ?? null;
+          ibovPrice     = r.regularMarketPrice;
+          ibovChangePct = r.regularMarketChangePercent ?? null;
         }
       }
-      setIbov(ibovPrice);
+      prevIbovRef.current = Math.round(ibovPrice);
+      const ibovChange = ibovChangePct;
 
       // ── Scores
       const fSelic = scoreSelic(selic);
@@ -164,6 +244,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
       const fIpca  = scoreIpca(ipca);
       const fUsd   = scoreUsdBrl(usdBrl);
       const fComm  = scoreCommodities(ibovChange);
+      const fGeo   = scoreGeopolitical(lastAlertRef.current);
 
       const rawScore =
         fSelic.score * WEIGHTS.selic +
@@ -171,8 +252,9 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
         fIpca.score  * WEIGHTS.ipca +
         fUsd.score   * WEIGHTS.usdBrl +
         fComm.score  * WEIGHTS.commodities +
-        GLOBAL_DEFAULT.score * WEIGHTS.globalRisk +
-        FISCAL_DEFAULT.score * WEIGHTS.fiscal;
+        fGeo.score   * WEIGHTS.geopolitical +
+        FISCAL_DEFAULT.score * WEIGHTS.fiscal +
+        GLOBAL_DEFAULT.score * WEIGHTS.globalRisk;
 
       const total     = Math.round(rawScore);
       const direction = getDirection(total);
@@ -180,24 +262,41 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
 
       const trendLabel = selic < selicPrev ? '▼ Cortes' : selic > selicPrev ? '▲ Alta' : '— Pausa';
 
-      setData({
-        selic, selicPrev, ipca, usdBrl, ibovPrice, ibovChange,
-        total, direction, setup,
-        factors: [
-          { label: 'SELIC Meta',     value: `${selic.toFixed(2)}% a.a.`,  icon: '🏦', ...fSelic, w: WEIGHTS.selic },
-          { label: 'Ciclo de Juros', value: trendLabel,                   icon: '📉', ...fTrend, w: WEIGHTS.selicTrend },
-          { label: 'IPCA 12 meses',  value: `${ipca.toFixed(2)}%`,        icon: '📊', ...fIpca,  w: WEIGHTS.ipca },
-          { label: 'USD/BRL',        value: `R$ ${usdBrl.toFixed(4)}`,    icon: '💵', ...fUsd,   w: WEIGHTS.usdBrl },
-          { label: 'Commodities',    value: ibovChange != null ? `B3 ${ibovChange > 0 ? '+' : ''}${ibovChange.toFixed(2)}%` : '—', icon: '🛢', ...fComm, w: WEIGHTS.commodities },
-          { label: 'Risco Fiscal',   value: 'Déficit primário',            icon: '🏛', ...FISCAL_DEFAULT, w: WEIGHTS.fiscal },
-          { label: 'Risco Global',   value: 'S&P / VIX',                  icon: '🌐', ...GLOBAL_DEFAULT, w: WEIGHTS.globalRisk },
-        ],
-      });
-
-      setTs(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      if (onSignal) {
-        onSignal({ score: total, direction: direction.dir, conviction: setup?.conviction ?? 50 });
+      // Divergência: preço sobe mas macro é negativa (ou vice-versa)
+      let divergence = null;
+      if (ibovChange != null) {
+        if (ibovChange > 0.5 && total < -10)
+          divergence = { type: 'bearish', msg: `⚠️ DIVERGÊNCIA BEARISH — B3 +${ibovChange.toFixed(2)}% mas macro Score ${total}. Rally pode não sustentar.` };
+        else if (ibovChange < -0.5 && total < -15)
+          divergence = { type: 'confirmed', msg: `🔴 QUEDA CONFIRMADA — B3 ${ibovChange.toFixed(2)}% alinha com Score macro ${total}. Sem suporte comprador.` };
+        else if (ibovChange < -0.3 && total > 15)
+          divergence = { type: 'bullish', msg: `⚠️ DIVERGÊNCIA ALTISTA — B3 ${ibovChange.toFixed(2)}% mas macro Score +${total}. Pode ser oportunidade de compra.` };
       }
+
+      // Só re-renderiza se SELIC, IPCA ou câmbio (1 decimal) mudaram — ignora micro-variações de score
+      const macroKey = `${selic.toFixed(2)}|${selicPrev.toFixed(2)}|${ipca.toFixed(1)}|${usdBrl.toFixed(1)}`;
+      if (macroKey !== macroKeyRef.current) {
+        macroKeyRef.current = macroKey;
+        setData({
+          selic, selicPrev, ipca, usdBrl, ibovPrice, ibovChange,
+          total, direction, setup, divergence,
+          factors: [
+            { label: 'SELIC Meta',     value: `${selic.toFixed(2)}% a.a.`,  icon: '🏦', ...fSelic, w: WEIGHTS.selic },
+            { label: 'Ciclo de Juros', value: trendLabel,                   icon: '📉', ...fTrend, w: WEIGHTS.selicTrend },
+            { label: 'IPCA 12 meses',  value: `${ipca.toFixed(2)}%`,        icon: '📊', ...fIpca,  w: WEIGHTS.ipca },
+            { label: 'USD/BRL',        value: `R$ ${usdBrl.toFixed(4)}`,    icon: '💵', ...fUsd,   w: WEIGHTS.usdBrl },
+            { label: 'Commodities',    value: ibovChange != null ? `B3 ${ibovChange > 0 ? '+' : ''}${ibovChange.toFixed(2)}%` : '—', icon: '🛢', ...fComm, w: WEIGHTS.commodities },
+            { label: 'Geopolítica',    value: fGeo.status,                  icon: '🌍', ...fGeo,   w: WEIGHTS.geopolitical },
+            { label: 'Risco Fiscal',   value: 'Déficit primário',            icon: '🏛', ...FISCAL_DEFAULT, w: WEIGHTS.fiscal },
+            { label: 'Risco Global',   value: 'S&P / VIX',                  icon: '🌐', ...GLOBAL_DEFAULT, w: WEIGHTS.globalRisk },
+          ],
+        });
+        if (onSignal) {
+          onSignal({ score: total, direction: direction.dir, conviction: setup?.conviction ?? 50 });
+        }
+      }
+
+      hasLoadedOnce.current = true;
     } catch (err) {
       console.error('WinAnalysis error:', err);
     } finally {
@@ -216,34 +315,6 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
 
   return (
     <div className="win-analysis">
-      {/* ── HEADER ───────────────────────────────────────────────────── */}
-      <div className="win-header">
-        <div className="win-title-group">
-          <div className="win-flag">🇧🇷</div>
-          <div>
-            <h2 className="win-title">WINFUT / B3 — Análise Macro Direcional</h2>
-            <p className="win-sub">BCB · ExchangeRate-API · Brapi.dev · Atualização a cada 2 min</p>
-          </div>
-        </div>
-        <div className="win-live-row">
-          <div className="win-price-pill">
-            <span className="win-price-label">IBOV</span>
-            <span className="win-price-value font-mono">
-              {loading ? '…' : Math.round(ibov).toLocaleString('pt-BR')} <span className="win-pts">pts</span>
-            </span>
-          </div>
-          {data?.ibovChange != null && (
-            <div className={`win-change ${data.ibovChange >= 0 ? 'pos' : 'neg'}`}>
-              {data.ibovChange >= 0 ? '▲' : '▼'} {Math.abs(data.ibovChange).toFixed(2)}%
-            </div>
-          )}
-          <button className={`win-refresh ${loading ? 'spin-btn' : ''}`} onClick={load} disabled={loading} title="Atualizar">
-            ⟳
-          </button>
-          {ts && <span className="win-ts">{ts}</span>}
-        </div>
-      </div>
-
       {loading && !data ? (
         <div className="win-loading">
           <div className="win-scan"><div className="win-scan-bar"></div></div>
@@ -252,9 +323,35 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
       ) : data ? (
         <div className="win-body">
 
+          {/* ── COMPASS GAUGE (full-width) ────────────────────────────── */}
+          <div className="win-compass-wrap">
+            <div className="compass-title">
+              Indicador Direcional {asset && asset.key !== 'WIN' ? asset.label : 'WINFUT'}
+              <span className="compass-sub">
+                {asset && !['WIN', 'DOL'].includes(asset.key) ? 'Contexto macro Brasil (backdrop)' : 'Macro + Geopolítica'}
+              </span>
+            </div>
+            <div className="compass-gauge-area">
+              <CompassGauge score={data.total} direction={data.direction} />
+              {data.divergence && (
+                <div className="compass-side-info">
+                  <div className={`csi-divergence ${data.divergence.type}`}>
+                    {data.divergence.msg}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* ── SCORECARD ────────────────────────────────────────────── */}
           <div className="win-scorecard">
-            <div className="win-scorecard-title">Fatores Macroeconômicos</div>
+            <div className="win-scorecard-title-row">
+              <div className="win-scorecard-title">Fatores Macroeconômicos</div>
+              <button className="win-toggle" onClick={() => setShowFactors(v => !v)}>
+                {showFactors ? 'Ocultar detalhes ▲' : 'Ver detalhes ▼'}
+              </button>
+            </div>
+            {showFactors && (
             <div className="win-factors">
               {data.factors.map(f => {
                 const absScore = Math.abs(f.score);
@@ -284,6 +381,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
                 );
               })}
             </div>
+            )}
 
             {/* Total score bar */}
             <div className="total-score-row">
@@ -318,16 +416,16 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
           {/* ── DIRECTION + SETUP ─────────────────────────────────────── */}
           <div className="win-right">
 
-            {/* Direction verdict */}
-            <div className="win-verdict" style={{ borderColor: dir?.color + '44', background: dir?.glow?.replace('.4', '.06') }}>
-              <div className="verdict-icon" style={{ color: dir?.color, textShadow: `0 0 20px ${dir?.color}` }}>
-                {dir?.icon}
-              </div>
-              <div>
-                <div className="verdict-dir" style={{ color: dir?.color }}>{dir?.dir}</div>
-                <div className="verdict-strength">{dir?.strength}</div>
-              </div>
-              {setup && (
+            {/* Direction verdict — só mostra quando há setup real (senão é redundante com o gauge acima) */}
+            {setup && (
+              <div className="win-verdict" style={{ borderColor: dir?.color + '44', background: dir?.glow?.replace('.4', '.06') }}>
+                <div className="verdict-icon" style={{ color: dir?.color, textShadow: `0 0 20px ${dir?.color}` }}>
+                  {dir?.icon}
+                </div>
+                <div>
+                  <div className="verdict-dir" style={{ color: dir?.color }}>{dir?.dir}</div>
+                  <div className="verdict-strength">{dir?.strength}</div>
+                </div>
                 <div className="verdict-conviction">
                   <div className="conv-label">Convicção</div>
                   <div className="conv-bar-wrap">
@@ -337,8 +435,8 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
                   </div>
                   <div className="conv-value" style={{ color: dir?.color }}>{setup.conviction}%</div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Trade Setup */}
             {setup ? (
@@ -394,13 +492,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
                   <span className="setup-warn">⚠️ Sempre use stop loss. Análise não é recomendação.</span>
                 </div>
               </div>
-            ) : (
-              <div className="win-neutral-msg">
-                <div style={{ fontSize: '2rem' }}>●</div>
-                <strong>Score NEUTRO</strong>
-                <p>Fatores macro sem direção clara.<br />Aguardar gatilho antes de operar.</p>
-              </div>
-            )}
+            ) : null}
 
             {/* Macro Reading */}
             <div className="win-reading">
@@ -443,6 +535,11 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
         }
         .win-price-label { font-size: .58rem; color: #10b981; font-weight: 800; text-transform: uppercase; }
         .win-price-value { font-size: .95rem; font-weight: 800; color: #10b981; }
+        @keyframes priceUpdate {
+          0%   { color: #fff; text-shadow: 0 0 12px #10b981; }
+          100% { color: #10b981; text-shadow: none; }
+        }
+        .win-price-value.price-flash { animation: priceUpdate .9s ease; }
         .win-pts { font-size: .55rem; font-weight: 400; opacity: .7; }
         .win-change { font-size: .8rem; font-weight: 800; }
         .win-change.pos { color: #00ff88; }
@@ -467,12 +564,59 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
         @keyframes scanSlide { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }
 
         /* Body */
-        .win-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+        .win-body {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-rows: auto auto;
+          gap: 1.2rem;
+          transition: opacity .25s ease;
+        }
+        .win-body.refreshing { opacity: .7; }
+        .win-compass-wrap {
+          grid-column: 1 / -1;
+          background: rgba(255,255,255,.02);
+          border: 1px solid rgba(255,255,255,.06);
+          border-radius: 14px;
+          padding: .9rem 1rem;
+        }
+        .compass-title {
+          font-size: .63rem; font-weight: 800; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: .08em;
+          display: flex; align-items: center; gap: .6rem; margin-bottom: .65rem;
+        }
+        .compass-sub {
+          font-size: .55rem; color: var(--text-muted); font-weight: 400;
+          padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,.05);
+          text-transform: none; letter-spacing: 0;
+        }
+        .compass-gauge-area {
+          display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
+        }
+        .compass-gauge-area > svg, .compass-gauge-area > div:first-child { flex: 0 0 auto; }
+        .compass-side-info {
+          display: flex; flex-direction: column; gap: .4rem; flex: 1; min-width: 140px;
+        }
+        .csi-divergence {
+          font-size: .68rem; font-weight: 700; line-height: 1.4;
+          padding: .45rem .6rem; border-radius: 8px; margin-top: .2rem;
+        }
+        .csi-divergence.bearish   { color: #fbbf24; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.25); }
+        .csi-divergence.confirmed { color: #ff3355; background: rgba(255,51,85,.08);  border: 1px solid rgba(255,51,85,.25); }
+        .csi-divergence.bullish   { color: #4ade80; background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.25); }
+
         @media (max-width: 900px) { .win-body { grid-template-columns: 1fr; } }
 
         /* Scorecard */
         .win-scorecard { display: flex; flex-direction: column; gap: .5rem; }
         .win-scorecard-title { font-size: .65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .25rem; }
+        .win-scorecard-title-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+        .win-scorecard-title-row .win-scorecard-title { margin-bottom: 0; }
+        .win-toggle {
+          font-size: .58rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+          border-radius: 999px; padding: .25rem .6rem; cursor: pointer; transition: all .15s;
+        }
+        .win-toggle:hover { background: rgba(255,255,255,.08); color: var(--text-secondary); }
 
         .win-factors { display: flex; flex-direction: column; gap: .22rem; }
         .factor-row {
@@ -561,15 +705,6 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
         .setup-validity { font-size: .63rem; color: #06b6d4; font-weight: 700; }
         .setup-warn { font-size: .57rem; color: var(--text-muted); }
 
-        /* Neutral */
-        .win-neutral-msg {
-          display: flex; flex-direction: column; align-items: center; gap: .35rem;
-          padding: 1.5rem; text-align: center; color: var(--text-muted);
-          background: rgba(99,149,255,.05); border: 1px solid rgba(99,149,255,.2); border-radius: 12px;
-        }
-        .win-neutral-msg strong { color: #6395ff; }
-        .win-neutral-msg p { font-size: .75rem; margin: 0; line-height: 1.5; }
-
         /* Reading */
         .win-reading {
           padding: .7rem .8rem; border-radius: 10px;
@@ -586,21 +721,29 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal }) => {
 
 const buildReading = (d) => {
   if (!d) return '';
-  const { selic, selicPrev, ipca, usdBrl, total, direction } = d;
-  const selicDir = selic < selicPrev ? 'em ciclo de cortes' : selic > selicPrev ? 'em ciclo de alta' : 'estável';
-  const ipcaOk   = ipca <= 4.5;
-  const brlOk    = usdBrl <= 5.20;
+  const { selic, selicPrev, ipca, usdBrl, total, direction, divergence, factors } = d;
+  const selicDir  = selic < selicPrev ? 'em ciclo de cortes' : selic > selicPrev ? 'em ciclo de alta' : 'estável';
+  const ipcaOk    = ipca <= 4.5;
+  const brlOk     = usdBrl <= 5.20;
+  const geoFactor = factors?.find(f => f.label === 'Geopolítica');
 
-  const lines = [
+  const parts = [
     `SELIC ${selic.toFixed(2)}% ${selicDir} — ${ipcaOk ? 'inflação controlada favorece risco' : 'inflação acima da meta pressiona o BC'}. `,
     `Câmbio ${usdBrl.toFixed(2)} — ${brlOk ? 'real forte dá espaço para compra de bolsa' : 'dólar elevado pressiona fluxo estrangeiro'}. `,
+    geoFactor && geoFactor.score !== -5 ? `Geopolítica: ${geoFactor.status} (${geoFactor.score > 0 ? '+' : ''}${geoFactor.score}). ` : '',
     direction.dir === 'COMPRA'
-      ? `Score macro positivo (+${total}): viés de COMPRA com ${direction.strength === 'FORTE' ? 'alta convicção' : 'convicção moderada'}. Prefira comprar no pullback com stop definido.`
+      ? `Score macro +${total}: viés de COMPRA ${direction.strength === 'FORTE' ? 'com alta convicção' : 'moderada'}. Prefira entrada no pullback com stop definido.`
       : direction.dir === 'VENDA'
-      ? `Score macro negativo (${total}): viés de VENDA com ${direction.strength === 'FORTE' ? 'alta convicção' : 'convicção moderada'}. Priorizar proteção e operar na força.`
-      : `Score neutro (${total}): macro sem direção clara. Aguardar rompimento de suporte ou resistência para definir posição.`,
+      ? `Score macro ${total}: viés de VENDA ${direction.strength === 'FORTE' ? 'com alta convicção' : 'moderada'}. Priorizar proteção e aguardar força para vender.`
+      : `Score neutro (${total}): macro sem direção clara. Aguardar rompimento de suporte ou resistência.`,
+    divergence ? ` ${divergence.msg}` : '',
   ];
-  return lines.join('');
+  return parts.filter(Boolean).join('');
 };
 
-export default WinAnalysis;
+// Só re-renderiza se currentWin ou currentDolar mudar
+// lastAlert é tratado via ref internamente — não precisa causar re-render
+export default React.memo(WinAnalysis, (prev, next) =>
+  prev.currentWin === next.currentWin &&
+  prev.currentDolar === next.currentDolar
+);

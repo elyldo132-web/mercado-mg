@@ -1,0 +1,124 @@
+// Estratégia automática: Alinhamento de Médias + CCI + ADX
+// Entradas automáticas, stop baseado em ATR e take-profit
+
+Input
+  pMediaAmarela(9);
+  pMediaAzul(21);
+  pMediaBranca(50);
+  pPeriodoCCI(14);
+  pPeriodoADX(14);
+  pNivelADX(25);
+  pPeriodoVol(20);
+  pPeriodoATR(14);
+  pPositionSize(1000);         // valor em moeda por operação
+  pAtrStopMult(2.0);
+  pAtrTPMult(4.0);
+  pMaxPositions(1);
+
+Var
+  vMA9, vMA21, vMA50 : Real;
+  vCCI : Real;
+  vADX : Real;
+  vVolMedia : Real;
+  vATR : Real;
+  vTrendMTF : Integer;
+  vCompra, vVenda : Boolean;
+  entryPrice, stopPrice, tpPrice : Real;
+  sizeQty : Integer;
+
+Begin
+  // Calculos
+  vMA9 := Media(pMediaAmarela, Close);
+  vMA21 := Media(pMediaAzul, Close);
+  vMA50 := Media(pMediaBranca, Close);
+
+  vCCI := CCI(pPeriodoCCI);
+  vADX := ADX(pPeriodoADX, pPeriodoADX);
+  vVolMedia := Media(pPeriodoVol, Volume);
+  vATR := AvgTrueRange(Round(pPeriodoATR));
+
+  // Tendencia multi-timeframe (200)
+  If (Close > Media(200, Close)) Then vTrendMTF := 1
+  Else If (Close < Media(200, Close)) Then vTrendMTF := -1
+  Else vTrendMTF := 0;
+
+  // Condicoes de alinhamento
+  vCompra := (vMA9 > vMA21) And (vMA21 > vMA50);
+  vVenda  := (vMA9 < vMA21) And (vMA21 < vMA50);
+
+  // Filtros
+  vCompra := vCompra And (vADX > pNivelADX);
+  vVenda  := vVenda And (vADX > pNivelADX);
+
+  vCompra := vCompra And (Volume > vVolMedia);
+  vVenda  := vVenda And (Volume > vVolMedia);
+
+  // ATR deve existir (evita divisão por zero)
+  vCompra := vCompra And (vATR > 0);
+  vVenda  := vVenda And (vATR > 0);
+
+  vCompra := vCompra And (vCCI > 0);
+  vVenda  := vVenda And (vCCI < 0);
+
+  vCompra := vCompra And (vTrendMTF = 1);
+  vVenda  := vVenda And (vTrendMTF = -1);
+
+  // Posicionamento e ordem
+  // calcula quantidade/contratos baseada em pPositionSize
+  If (pPositionSize > 0) Then
+  Begin
+    sizeQty := Round(pPositionSize / Close);
+  End
+  Else
+  Begin
+    sizeQty := 1;
+  End;
+  If (sizeQty < 1) Then sizeQty := 1;
+
+  // Registrar sinais (SEM EXECUTAR ORDENS) - compatível com visualização apenas
+  If (vCompra) Then
+  Begin
+    entryPrice := Close;
+    stopPrice := entryPrice - (pAtrStopMult * vATR);
+    tpPrice := entryPrice + (pAtrTPMult * vATR);
+    PlotText("C", clLime, -1, 12);
+    Alert("Sinal de Compra (somente sinal)");
+  End
+  Else If (vVenda) Then
+  Begin
+    entryPrice := Close;
+    stopPrice := entryPrice + (pAtrStopMult * vATR);
+    tpPrice := entryPrice - (pAtrTPMult * vATR);
+    PlotText("V", clRed, 1, 12);
+    Alert("Sinal de Venda (somente sinal)");
+  End
+  Else
+  Begin
+    entryPrice := 0;
+    stopPrice := 0;
+    tpPrice := 0;
+  End;
+
+  // Plots e indicadores auxiliares
+  Plot(vMA9); SetPlotColor(1, clYellow);
+  Plot2(vMA21); SetPlotColor(2, clBlue);
+  Plot3(vMA50); SetPlotColor(3, clWhite);
+
+  // Mostrar linhas de entrada/stop/tp do último sinal
+  Plot4(entryPrice); SetPlotColor(4, clLime);
+  Plot5(stopPrice); SetPlotColor(5, clFuchsia);
+  Plot6(tpPrice); SetPlotColor(6, clGreen);
+
+  // Sinais visuais
+  If (vCompra) Then
+  Begin
+    PaintBar(clLime);
+    PlotText("C", clLime, -1, 12);
+  End Else If (vVenda) Then
+  Begin
+    PaintBar(clRed);
+    PlotText("V", clRed, 1, 12);
+  End Else
+    PaintBar(RGB(150,150,150));
+
+End;

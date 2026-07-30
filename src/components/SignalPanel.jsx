@@ -1,4 +1,6 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, Tooltip, ResponsiveContainer } from 'recharts';
+import { isB3Open, fetchBTC24h } from '../utils/MarketStatus';
 
 // ── Signal aggregation ───────────────────────────────────────────────────────
 
@@ -36,6 +38,26 @@ const newsSentimentLabel = (score) => {
   return               { label: 'PESSIMISTA', color: '#ff3355' };
 };
 
+// ── Histórico do sinal (localStorage) ────────────────────────────────────────
+
+const HISTORY_KEY = 'signal_history';
+const SAMPLE_INTERVAL_MS = 5 * 60 * 1000; // amostra a cada 5 min
+const MAX_SAMPLES = 96; // ~8h de histórico
+
+const loadSignalHistory = () => {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+};
+
+const pushSignalSample = (sample) => {
+  const hist = loadSignalHistory();
+  const now = Date.now();
+  const last = hist[hist.length - 1];
+  if (last && now - last.t < SAMPLE_INTERVAL_MS) return hist;
+  const next = [...hist, { t: now, ...sample }].slice(-MAX_SAMPLES);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+  return next;
+};
+
 // ── Pulse animation (sound-like) ─────────────────────────────────────────────
 const usePrevSignal = (signal) => {
   const ref = useRef(signal);
@@ -53,20 +75,47 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
   const newsScore   = useMemo(() => newsSentimentScore(lastAlert), [lastAlert]);
   const newsSent    = useMemo(() => newsSentimentLabel(newsScore), [newsScore]);
 
-  // Momentum: simulated baseline from macro direction
-  const momentumScore = macroScore > 0 ? Math.min(40, macroScore * 0.5) : Math.max(-40, macroScore * 0.5);
+  // B3 fechada → prioriza cripto (BTC 24h) como momentum, já que o macro Brasil fica parado à noite
+  const b3Open = isB3Open();
+  const [btc, setBtc] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetchBTC24h().then(d => { if (alive) setBtc(d); }).catch(() => {});
+    load();
+    const t = setInterval(load, 120000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // Momentum: baseline do macro (mercado aberto) ou BTC 24h (mercado fechado)
+  const macroMomentum = macroScore > 0 ? Math.min(40, macroScore * 0.5) : Math.max(-40, macroScore * 0.5);
+  const btcMomentum   = btc ? Math.max(-40, Math.min(40, btc.changePct * 3)) : macroMomentum;
+  const momentumScore = b3Open ? macroMomentum : btcMomentum;
   const momentumLabel = momentumScore > 15 ? { label: 'ALTA', color: '#00ff88' }
     : momentumScore < -15 ? { label: 'QUEDA', color: '#ff3355' }
     : { label: 'LATERAL', color: '#6395ff' };
 
-  // Weighted combined score
-  // Macro: 60%, News: 25%, Momentum: 15%
-  const combined = Math.round(macroScore * 0.60 + newsScore * 0.25 + momentumScore * 0.15);
+  // Pesos: com a B3 aberta o macro domina; fechada, o momentum 24h (cripto) ganha peso
+  const WEIGHTS = b3Open
+    ? { macro: 0.60, news: 0.25, momentum: 0.15 }
+    : { macro: 0.20, news: 0.25, momentum: 0.55 };
+
+  const combined = Math.round(macroScore * WEIGHTS.macro + newsScore * WEIGHTS.news + momentumScore * WEIGHTS.momentum);
   const levelKey = scoreToLevel(combined);
   const level    = SIGNAL_LEVELS[levelKey];
 
   const prev = usePrevSignal(levelKey);
   const changed = prev !== levelKey;
+
+  // ── Histórico para o gráfico de evolução ────────────────────────────────
+  const [history, setHistory] = useState(loadSignalHistory);
+  const [showHistory, setShowHistory] = useState(false);
+  useEffect(() => {
+    setHistory(pushSignalSample({ macro: macroScore, news: newsScore, momentum: Math.round(momentumScore), combinado: combined }));
+  }, [macroScore, newsScore, momentumScore, combined]);
+
+  const chartData = history.map(h => ({
+    time: h.t, Macro: h.macro, Notícias: h.news, Momentum: h.momentum, Combinado: h.combinado,
+  }));
 
   const conviction = Math.min(98, Math.max(10, Math.round(50 + Math.abs(combined) * 0.65)));
 
@@ -76,7 +125,7 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
       label:  'Análise Macro (B3)',
       icon:   '🏦',
       score:  macroScore,
-      weight: 60,
+      weight: Math.round(WEIGHTS.macro * 100),
       status: macroDir,
       color:  macroDir === 'COMPRA' ? '#00ff88' : macroDir === 'VENDA' ? '#ff3355' : '#6395ff',
       note:   macroConv ? `Convicção ${macroConv}%` : 'SELIC · IPCA · USD/BRL',
@@ -86,20 +135,20 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
       label:  'Sentimento de Notícias',
       icon:   '📰',
       score:  newsScore,
-      weight: 25,
+      weight: Math.round(WEIGHTS.news * 100),
       status: newsSent.label,
       color:  newsSent.color,
       note:   lastAlert && lastAlert !== 'IGNORAR' ? `${lastAlert.strength || ''} · ${lastAlert.sector || ''}` : 'Nenhuma notícia analisada',
     },
     {
       key:    'momentum',
-      label:  'Momentum de Mercado',
-      icon:   '📈',
-      score:  momentumScore,
-      weight: 15,
+      label:  b3Open ? 'Momentum de Mercado' : 'Momentum (BTC 24h)',
+      icon:   b3Open ? '📈' : '₿',
+      score:  Math.round(momentumScore),
+      weight: Math.round(WEIGHTS.momentum * 100),
       status: momentumLabel.label,
       color:  momentumLabel.color,
-      note:   'Derivado da análise macro',
+      note:   b3Open ? 'Derivado da análise macro' : (btc ? `BTC 24h: ${btc.changePct > 0 ? '+' : ''}${btc.changePct.toFixed(1)}%` : 'Buscando BTC 24h...'),
     },
   ];
 
@@ -172,6 +221,40 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
         })}
       </div>
 
+      {/* ── Evolução do sinal ───────────────────────────────────── */}
+      {chartData.length >= 2 && (
+        <div className="sp-history">
+          <button className="sp-history-toggle" onClick={() => setShowHistory(v => !v)}>
+            {showHistory ? 'Ocultar evolução do sinal ▲' : 'Ver evolução do sinal ▼'}
+          </button>
+          {showHistory && (
+          <>
+          <div className="sp-history-title">Evolução do Sinal — últimas horas</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
+              <XAxis
+                dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }}
+                tickFormatter={(t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                axisLine={{ stroke: 'rgba(255,255,255,.1)' }} tickLine={false}
+              />
+              <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={false} tickLine={false} width={30} />
+              <Tooltip
+                contentStyle={{ background: '#0a0d14', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, fontSize: 11 }}
+                labelFormatter={(t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Line type="monotone" dataKey="Macro"     stroke="#6395ff" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Notícias"  stroke="#a855f7" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Momentum"  stroke="#fbbf24" strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="Combinado" stroke="#00ff88" strokeWidth={2.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+          </>
+          )}
+        </div>
+      )}
+
       {/* ── Action row ──────────────────────────────────────────── */}
       <div className="sp-action">
         {levelKey === 'AGUARDAR' ? (
@@ -183,7 +266,6 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
             {level.icon} {level.label}: consulte o setup no painel de Análise Macro acima.
           </div>
         )}
-        {changed && <div className="sp-changed-badge">🔔 Sinal atualizado</div>}
       </div>
 
       <style jsx="true">{`
@@ -250,6 +332,18 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
         }
         .sp-weight { font-size: .55rem; color: var(--text-muted); min-width: 24px; text-align: right; }
 
+        .sp-history { margin-bottom: .8rem; }
+        .sp-history-toggle {
+          width: 100%; font-size: .6rem; font-weight: 700; color: var(--text-muted);
+          background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+          border-radius: 8px; padding: .4rem .6rem; cursor: pointer; transition: all .15s;
+        }
+        .sp-history-toggle:hover { background: rgba(255,255,255,.06); color: var(--text-secondary); }
+        .sp-history-title {
+          font-size: .58rem; font-weight: 800; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: .08em; margin-bottom: .3rem;
+        }
+
         .sp-action { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
         .sp-action-msg { font-size: .73rem; font-weight: 700; }
         .sp-wait-msg   { font-size: .73rem; color: #fbbf24; }
@@ -264,4 +358,4 @@ const SignalPanel = ({ macroSignal, lastAlert }) => {
   );
 };
 
-export default SignalPanel;
+export default React.memo(SignalPanel);
