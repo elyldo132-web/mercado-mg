@@ -19,6 +19,7 @@ import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
 import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
 import { scanRealOpportunities } from '../utils/OpportunityScan';
+import { fetchBTC24h, fetchSPFutures, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
 
 // ── Pesquisa de ativos para simulação ────────────────────────────────────────
 const PROXIES = [
@@ -294,11 +295,13 @@ const Dashboard = ({ onLogout }) => {
     return Array.from({ length: 15 }, (_, i) => {
       const baseWin = 125000 + (Math.random() * 600 - 300);
       const baseDolar = 5.02 + (Math.random() * 0.06 - 0.03);
+      const baseBtc = 67000 + (Math.random() * 1200 - 600);
       return {
         time: new Date(Date.now() - (15 - i) * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         sentiment: 50 + Math.floor(Math.random() * 20 - 10),
         win: Math.floor(baseWin),
         dolar: parseFloat(baseDolar.toFixed(4)),
+        btc: Math.floor(baseBtc),
         activeAssetVal: 0,
         winSignal: null,
         dolarSignal: null,
@@ -320,6 +323,8 @@ const Dashboard = ({ onLogout }) => {
   const [searchedAssetResult, setSearchedAssetResult] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [showCharts, setShowCharts] = useState(false);
+  const [btcChange24h, setBtcChange24h] = useState(null);
+  const [spChange, setSpChange] = useState(null);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -574,6 +579,16 @@ const Dashboard = ({ onLogout }) => {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // BTC 24h + futuros S&P 500 — alimenta o indicador de cripto nos gráficos de preço
+  useEffect(() => {
+    let alive = true;
+    const loadBtc = () => fetchBTC24h().then(d => { if (alive) setBtcChange24h(d.changePct); }).catch(() => {});
+    const loadSp = () => fetchSPFutures().then(d => { if (alive) setSpChange(d?.change ?? null); }).catch(() => {});
+    loadBtc(); loadSp();
+    const t = setInterval(() => { loadBtc(); loadSp(); }, 120000); // a cada 2 min
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   // Market Pulse: Pequenas oscilações para manter o dashboard "vivo"
   useEffect(() => {
     const pulse = setInterval(() => {
@@ -584,9 +599,11 @@ const Dashboard = ({ onLogout }) => {
         // Oscilações leves (ruído de mercado)
         const winDrift = (Math.random() * 30 - 15);
         const dolarDrift = (Math.random() * 0.002 - 0.001);
-        
+        const btcDrift = (Math.random() * 60 - 30);
+
         last.win = Math.floor(last.win + winDrift);
         last.dolar = parseFloat((last.dolar + dolarDrift).toFixed(4));
+        last.btc = Math.floor((last.btc || 67000) + btcDrift);
         
         if (activeTicker) {
           last.activeAssetVal = parseFloat((last.activeAssetVal + (Math.random() * 0.2 - 0.1)).toFixed(2));
@@ -696,6 +713,10 @@ const Dashboard = ({ onLogout }) => {
     showToast(`${type === 'BUY' ? 'Compra' : 'Venda'} em ${activeTicker} registrada`, 'success');
   };
 
+  const cryptoScore = computeCryptoScore(btcChange24h, spChange);
+  const cryptoDir = toCryptoDir(cryptoScore);
+  const cryptoDirection = cryptoDir.op === 'COMPRAR' ? 'COMPRA' : cryptoDir.op === 'VENDER' ? 'VENDA' : 'NEUTRO';
+
   return (
     <div className={`dashboard regime-${marketRegime.toLowerCase()}`}>
       <Header 
@@ -738,11 +759,9 @@ const Dashboard = ({ onLogout }) => {
                 data={chartData}
                 currentWin={winPrice}
                 currentDolar={dolarPrice}
-                activeTicker={activeTicker}
-                activePrice={activeTickerPrice}
-                positions={positions}
-                lastAlert={lastAlert}
+                currentBtc={chartData[chartData.length - 1]?.btc}
                 direction={macroSignal?.direction}
+                cryptoDirection={cryptoDirection}
               />
             )}
 

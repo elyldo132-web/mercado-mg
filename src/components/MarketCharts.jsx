@@ -78,16 +78,18 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePrice, positions, lastAlert, direction }) => {
-  const suggestedEntryLine = lastAlert && activeTicker && (lastAlert.tradeAction === 'Compra' || lastAlert.tradeAction === 'Venda')
-    ? activePrice
-    : null;
-  const suggestedLineColor = lastAlert?.tradeAction === 'Compra' ? 'var(--accent-green)' : 'var(--accent-red)';
-  const suggestedLineLabel = lastAlert?.tradeAction ? `${lastAlert.tradeAction} sugerida` : '';
-
+const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection }) => {
   // Cor do WIN segue o sentimento consolidado; DOL segue invertido (dólar sobe quando bolsa cai)
   const winColor = direction === 'COMPRA' ? '#00ff88' : direction === 'VENDA' ? '#ff3355' : '#00f5d4';
   const dolColor = direction === 'COMPRA' ? '#ff3355' : direction === 'VENDA' ? '#00ff88' : 'var(--accent-gold)';
+
+  // Acende Compra/Venda na legenda conforme o sinal direcional atual (DOL invertido em relação ao WIN)
+  const winLit = direction === 'COMPRA' ? 'buy' : direction === 'VENDA' ? 'sell' : null;
+  const dolLit = direction === 'COMPRA' ? 'sell' : direction === 'VENDA' ? 'buy' : null;
+
+  // Cripto segue o sinal de risco-on/off (modo 24h) — mesmo cálculo da Diretriz do Dia
+  const btcColor = cryptoDirection === 'COMPRA' ? '#00ff88' : cryptoDirection === 'VENDA' ? '#ff3355' : '#f7931a';
+  const btcLit = cryptoDirection === 'COMPRA' ? 'buy' : cryptoDirection === 'VENDA' ? 'sell' : null;
   
   const calculateChange = (key) => {
     if (data.length < 2) return 0;
@@ -135,6 +137,8 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
       win_vwap: parseFloat(calculateVWAP('win').toFixed(0)),
       dolar_ema: parseFloat(calculateEMA('dolar', item.dolar).toFixed(4)),
       dolar_vwap: parseFloat(calculateVWAP('dolar').toFixed(4)),
+      btc_ema: item.btc != null ? parseFloat(calculateEMA('btc', item.btc).toFixed(0)) : null,
+      btc_vwap: item.btc != null ? parseFloat(calculateVWAP('btc').toFixed(0)) : null,
       
       // OHLC objects for tooltips and custom shape calculations
       win_ohlc: [Math.min(winOpen, winClose), Math.max(winOpen, winClose)],
@@ -169,7 +173,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#232931" vertical={false} />
-              <XAxis dataKey="time" hide />
+              <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
               <YAxis domain={[0, 100]} hide />
               <Tooltip content={<CustomTooltip suffix="%" />} />
               <ReferenceLine y={50} stroke="#30363d" strokeDasharray="5 5" />
@@ -193,7 +197,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
           <ResponsiveContainer width="100%" height={150}>
             <LineChart data={processedData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#232931" vertical={false} />
-              <XAxis dataKey="time" hide />
+              <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
               <YAxis yAxisId="left" orientation="left" hide domain={['auto', 'auto']} />
               <YAxis yAxisId="right" orientation="right" hide domain={['auto', 'auto']} />
               <Tooltip content={<CustomTooltip />} />
@@ -239,7 +243,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
           <div className="sub-body">
             <ResponsiveContainer width="100%" height={120}>
               <ComposedChart data={processedData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="time" hide />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
                 <YAxis domain={['auto', 'auto']} hide />
                 <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
                 <Area
@@ -259,8 +263,8 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
             <div className="indicator-legend">
               <span className="leg-item"><span className="dot ema"></span> EMA 5</span>
               <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
-              <span className="leg-item signal-leg">▲ Compra</span>
-              <span className="leg-item signal-leg sell">▼ Venda</span>
+              <span className={`leg-item signal-leg ${winLit === 'buy' ? 'lit' : ''}`}>▲ Compra</span>
+              <span className={`leg-item signal-leg sell ${winLit === 'sell' ? 'lit' : ''}`}>▼ Venda</span>
             </div>
           </div>
         </div>
@@ -279,7 +283,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
           <div className="sub-body">
             <ResponsiveContainer width="100%" height={120}>
               <ComposedChart data={processedData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="time" hide />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
                 <YAxis domain={['auto', 'auto']} hide />
                 <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
                 <Area
@@ -299,61 +303,52 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
             <div className="indicator-legend">
               <span className="leg-item"><span className="dot ema-gold"></span> EMA 5</span>
               <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
-              <span className="leg-item signal-leg">▲ Compra</span>
-              <span className="leg-item signal-leg sell">▼ Venda</span>
+              <span className={`leg-item signal-leg ${dolLit === 'buy' ? 'lit' : ''}`}>▲ Compra</span>
+              <span className={`leg-item signal-leg sell ${dolLit === 'sell' ? 'lit' : ''}`}>▼ Venda</span>
             </div>
           </div>
         </div>
 
-        {/* ACTIVE ASSET CHART */}
-        {activeTicker && (
-          <div className="sub-chart glass active-asset animate-fade-in">
-            <div className="sub-header">
-              <div className="asset-info">
-                <span className="asset-name text-blue">{activeTicker} (FOCO)</span>
-                <span className={`asset-change font-mono ${calculateChange('activeAssetVal') >= 0 ? 'text-green' : 'text-red'}`}>
-                  {calculateChange('activeAssetVal')}%
-                </span>
-              </div>
-              <div className="asset-price font-mono">{activePrice?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+        {/* BTC (CRIPTO) CHART — sinal de risco-on/off (modo 24h) */}
+        <div className="sub-chart glass">
+          <div className="sub-header">
+            <div className="asset-info">
+              <span className="asset-name">🪙 BTC/USD - M5</span>
+              <span className={`asset-change font-mono ${calculateChange('btc') >= 0 ? 'text-green' : 'text-red'}`}>
+                {calculateChange('btc')}%
+              </span>
             </div>
-            <div className="sub-body">
-              <ResponsiveContainer width="100%" height={120}>
-                <LineChart data={processedData}>
-                  <XAxis dataKey="time" hide />
-                  <YAxis domain={['auto', 'auto']} hide />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="activeAssetVal"
-                    stroke="#a855f7"
-                    strokeWidth={2.5}
-                    dot={<SignalDot signalType="assetSignal" />}
-                    animationDuration={800}
-                  />
-                  {positions?.filter(p => p.ticker === activeTicker).map((pos, idx) => (
-                    <ReferenceLine 
-                      key={`pos-${idx}`}
-                      y={pos.entryPrice} 
-                      yAxisId="0" 
-                      stroke={pos.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'} 
-                      strokeDasharray="3 3"
-                      label={{ value: `Entry: ${pos.entryPrice.toFixed(2)}`, position: 'right', fill: '#fff', fontSize: 8 }}
-                    />
-                  ))}
-                  {suggestedEntryLine && (
-                    <ReferenceLine
-                      y={suggestedEntryLine}
-                      stroke={suggestedLineColor}
-                      strokeDasharray="4 4"
-                      label={{ value: suggestedLineLabel, position: 'right', fill: suggestedLineColor, fontSize: 10 }}
-                    />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <div className="asset-price font-mono">$ {currentBtc?.toLocaleString('en-US')}</div>
           </div>
-        )}
+          <div className="sub-body">
+            <ResponsiveContainer width="100%" height={120}>
+              <ComposedChart data={processedData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
+                <YAxis domain={['auto', 'auto']} hide />
+                <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
+                <Area
+                  type="monotone"
+                  dataKey="btc"
+                  stroke={btcColor}
+                  fillOpacity={0.1}
+                  fill={btcColor}
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                />
+                <Line type="monotone" dataKey="btc_ema" stroke={btcColor} strokeOpacity={0.4} strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
+                <Line type="monotone" dataKey="btc_vwap" stroke="#f15bb5" strokeWidth={1.5} dot={false} strokeOpacity={0.7} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div className="indicator-legend">
+              <span className="leg-item"><span className="dot ema-btc"></span> EMA 5</span>
+              <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
+              <span className={`leg-item signal-leg ${btcLit === 'buy' ? 'lit' : ''}`}>▲ Compra</span>
+              <span className={`leg-item signal-leg sell ${btcLit === 'sell' ? 'lit' : ''}`}>▼ Venda</span>
+            </div>
+            <div className="btc-signal-note">Sinal: risco-on/off 24h (BTC + futuros S&amp;P 500)</div>
+          </div>
+        </div>
+
       </div>
 
       <style jsx="true">{`
@@ -444,11 +439,6 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
           letter-spacing: -0.4px;
         }
 
-        .active-asset {
-          background: rgba(168, 85, 247, 0.05);
-          border-color: rgba(168, 85, 247, 0.3);
-        }
-
         .indicator-legend {
           display: flex;
           gap: 0.75rem;
@@ -463,9 +453,15 @@ const MarketCharts = ({ data, currentWin, currentDolar, activeTicker, activePric
         .dot { width: 8px; height: 8px; border-radius: 50%; }
         .ema { background: rgba(0, 245, 212, 0.3); border: 1px dashed var(--accent-green); }
         .ema-gold { background: rgba(251, 191, 36, 0.3); border: 1px dashed var(--accent-gold); }
+        .ema-btc { background: rgba(247, 147, 26, 0.3); border: 1px dashed #f7931a; }
+        .btc-signal-note { font-size: .55rem; color: var(--text-muted); text-align: right; margin-top: .3rem; font-style: italic; }
         .vwap { background: #f15bb5; }
-        .signal-leg { color: var(--accent-green); }
+        .signal-leg { color: var(--accent-green); opacity: .4; transition: opacity .25s, text-shadow .25s; }
         .signal-leg.sell { color: var(--accent-red); }
+        .signal-leg.lit {
+          opacity: 1; font-weight: 800;
+          text-shadow: 0 0 8px currentColor;
+        }
 
         .separator { color: var(--border-color); }
 

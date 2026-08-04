@@ -24,3 +24,34 @@ export const fetchBTC24h = async () => {
   const d = await r.json();
   return { price: parseFloat(d.lastPrice), changePct: parseFloat(d.priceChangePercent) };
 };
+
+// Futuros do S&P 500 (ES=F) via Yahoo Finance, com proxy
+export const fetchSPFutures = async () => {
+  const PROXY = 'https://api.allorigins.win/raw?url=';
+  const url   = 'https://query1.finance.yahoo.com/v8/finance/chart/ES%3DF?range=1d&interval=5m';
+  try {
+    const res  = await fetch(`${PROXY}${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    const json = await res.json();
+    const r    = json?.chart?.result?.[0];
+    if (!r) return null;
+    const quotes  = r.indicators.quote[0].close.filter(v => v != null);
+    const prev    = r.meta?.chartPreviousClose ?? quotes[0];
+    const current = quotes[quotes.length - 1];
+    const change  = ((current - prev) / prev) * 100;
+    return { price: current, change: parseFloat(change.toFixed(2)) };
+  } catch {
+    return null;
+  }
+};
+
+// Score de risco-on/off (cripto + internacional) — mesma escala usada na Diretriz do Dia
+export const computeCryptoScore = (btcChangePct, spChangePct) =>
+  Math.round((btcChangePct ?? 0) * 3 + (spChangePct ?? 0) * 6);
+
+export const toCryptoDir = (score) => {
+  if (score >=  25) return { key: 'FORTE_COMPRA', label: 'RISCO-ON FORTE', icon: '▲▲', color: '#00ff88', op: 'COMPRAR' };
+  if (score >=  10) return { key: 'COMPRA',        label: 'RISCO-ON',       icon: '▲',  color: '#4ade80', op: 'COMPRAR' };
+  if (score >= -9)  return { key: 'NEUTRO',        label: 'LATERAL',        icon: '⏸',  color: '#fbbf24', op: 'AGUARDAR' };
+  if (score >= -24) return { key: 'VENDA',         label: 'RISCO-OFF',      icon: '▼',  color: '#f97316', op: 'VENDER' };
+  return              { key: 'FORTE_VENDA',  label: 'RISCO-OFF FORTE', icon: '▼▼', color: '#ff3355', op: 'VENDER' };
+};

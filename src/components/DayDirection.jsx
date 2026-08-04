@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { isB3Open, fetchBTC24h } from '../utils/MarketStatus';
+import { isB3Open, fetchBTC24h, fetchSPFutures, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
 
 // ── Day-of-week patterns (B3 historical tendencies) ─────────────────────────
 
@@ -27,26 +27,6 @@ const getPhase = () => {
   if (t < 960)  return { phase: '✅ POWER HOUR',      color: '#00ff88', ok: true,  tip: 'Janela NY ativa. Operações no sentido macro têm melhor R:R.' };
   if (t < 1080) return { phase: 'FECHAMENTO (16:00)', color: '#f97316', ok: false, tip: 'Posições sendo zeradas. Não abra novas operações.' };
   return          { phase: 'PÓS-MERCADO',             color: '#6395ff', ok: false, tip: 'Pregão encerrado. Planeje o próximo dia.' };
-};
-
-// ── US futures fetch ─────────────────────────────────────────────────────────
-
-const fetchSPFutures = async () => {
-  const PROXY = 'https://api.allorigins.win/raw?url=';
-  const url   = 'https://query1.finance.yahoo.com/v8/finance/chart/ES%3DF?range=1d&interval=5m';
-  try {
-    const res  = await fetch(`${PROXY}${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    const json = await res.json();
-    const r    = json?.chart?.result?.[0];
-    if (!r) return null;
-    const quotes  = r.indicators.quote[0].close.filter(v => v != null);
-    const prev    = r.meta?.chartPreviousClose ?? quotes[0];
-    const current = quotes[quotes.length - 1];
-    const change  = ((current - prev) / prev) * 100;
-    return { price: current, change: parseFloat(change.toFixed(2)) };
-  } catch {
-    return null;
-  }
 };
 
 // ── Score calculation ────────────────────────────────────────────────────────
@@ -112,16 +92,6 @@ const AssetBox = ({ asset, op, tip, dir }) => {
 // ── Main component ───────────────────────────────────────────────────────────
 
 const OP_FROM_DIRECTION = { 'COMPRA': 'COMPRAR', 'VENDA': 'VENDER', 'SEM OPERAÇÃO': 'AGUARDAR' };
-
-// ── Modo 24h (B3 fechada) — cripto + futuros internacionais ─────────────────
-
-const toCryptoDir = (score) => {
-  if (score >=  25) return { key: 'FORTE_COMPRA', label: 'RISCO-ON FORTE', icon: '▲▲', color: '#00ff88', op: 'COMPRAR' };
-  if (score >=  10) return { key: 'COMPRA',        label: 'RISCO-ON',       icon: '▲',  color: '#4ade80', op: 'COMPRAR' };
-  if (score >= -9)  return { key: 'NEUTRO',        label: 'LATERAL',        icon: '⏸',  color: '#fbbf24', op: 'AGUARDAR' };
-  if (score >= -24) return { key: 'VENDA',         label: 'RISCO-OFF',      icon: '▼',  color: '#f97316', op: 'VENDER' };
-  return              { key: 'FORTE_VENDA',  label: 'RISCO-OFF FORTE', icon: '▼▼', color: '#ff3355', op: 'VENDER' };
-};
 
 const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
   const [sp, setSp]         = useState(null);
@@ -212,7 +182,7 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
   const marketOpen = isB3Open();
 
   const btcChange   = btc?.changePct ?? null;
-  const cryptoScore = Math.round((btcChange ?? 0) * 3 + (spChange ?? 0) * 6);
+  const cryptoScore = computeCryptoScore(btcChange, spChange);
   const cDir        = toCryptoDir(cryptoScore);
   const nextOpenLabel = (dow === 5 || dow === 6 || dow === 0) ? 'na segunda-feira' : 'amanhã';
 
