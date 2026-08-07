@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import AssetDirectionCard from './AssetDirectionCard';
 
 // ── Setup calculators ────────────────────────────────────────────────────────
 
@@ -64,12 +65,14 @@ const calcDolSetup = (dolarPrice, winDir, conviction) => {
 
 // ── Checklist evaluator ──────────────────────────────────────────────────────
 
-const evalGuide = (macroSignal, lastAlert) => {
+const evalGuide = (macroSignal, lastAlert, globalMacro) => {
   const score      = macroSignal?.score      ?? 0;
   const conviction = macroSignal?.conviction ?? 50;
   const dir        = macroSignal?.direction  ?? 'NEUTRO';
   const newsAction = lastAlert?.tradeAction;
   const newsStr    = lastAlert?.strength;
+  const gScore      = globalMacro?.score;
+  const gConfidence = globalMacro?.confidence ?? 0;
 
   const st = (ok, bad) => ok ? 'ok' : bad ? 'bad' : 'wait';
 
@@ -81,6 +84,12 @@ const evalGuide = (macroSignal, lastAlert) => {
                  : newsAction === 'Venda'  && dir === 'COMPRA' ? 'bad'
                  : 'wait';
   const strSt    = st(Math.abs(score) >= 30, Math.abs(score) < 15);
+  const gSt      = gScore == null ? 'wait'
+                 : dir === 'COMPRA' && gScore >=  10 ? 'ok'
+                 : dir === 'VENDA'  && gScore <= -10 ? 'ok'
+                 : dir === 'COMPRA' && gScore <= -15 ? 'bad'
+                 : dir === 'VENDA'  && gScore >=  15 ? 'bad'
+                 : 'wait';
 
   const checks = [
     {
@@ -115,6 +124,15 @@ const evalGuide = (macroSignal, lastAlert) => {
          : 'Sem tendência definida',
       status: strSt,
     },
+    {
+      num: 5, label: 'Sentimento Global',
+      detail: gScore == null ? 'Sem dado' : `${gScore > 0 ? '+' : ''}${gScore} (${gConfidence}% conf.)`,
+      tip: gScore == null ? 'Indicadores globais indisponíveis no momento'
+         : gSt === 'ok'  ? 'DXY/VIX/Treasury/S&P/Nasdaq/BTC/ETH/Ouro/Petróleo confirmam o viés'
+         : gSt === 'bad' ? 'Indicadores globais CONTRA o viés — cuidado!'
+         : 'Cenário global neutro ou pouco conclusivo',
+      status: gSt,
+    },
   ];
 
   const okCount  = checks.filter(c => c.status === 'ok').length;
@@ -147,108 +165,18 @@ const STATUS_CFG = {
   bad:  { icon: '❌', color: '#ff3355', label: 'ALERTA' },
 };
 
-// ── Setup card ───────────────────────────────────────────────────────────────
+// ── Adapta os setups (WIN/DOL) e o resultado do Robô Analista para o formato
+//    de escada de preço do AssetDirectionCard ───────────────────────────────
 
-const SetupCard = ({ s, verdictColor }) => {
-  if (!s) return (
-    <div className="tg-setup-card neutral-card">
-      <div className="setup-asset">{s?.asset ?? '—'}</div>
-      <div className="setup-wait">● Aguardar sinal direcional claro</div>
-    </div>
-  );
-  const dc = s.isCompra ? '#00ff88' : '#ff3355';
-  return (
-    <div className="tg-setup-card" style={{ borderColor: dc + '33', background: dc + '06' }}>
-      <div className="setup-asset-row">
-        <span className="setup-asset">{s.asset}</span>
-        <span className="setup-dir-badge" style={{ color: dc, borderColor: dc + '44', background: dc + '12' }}>
-          {s.isCompra ? '▲ COMPRAR' : '▼ VENDER'}
-        </span>
-      </div>
-
-      {/* Price ladder */}
-      <div className="setup-ladder">
-        <div className="ladder-row t2-row">
-          <span className="lr-label">ALVO 2</span>
-          <span className="lr-value font-mono">{s.t2}</span>
-          <span className="lr-meta">+R$ {s.t2Gain} · R:R 1:{s.rr2}</span>
-        </div>
-        <div className="ladder-row t1-row">
-          <span className="lr-label">ALVO 1</span>
-          <span className="lr-value font-mono">{s.t1}</span>
-          <span className="lr-meta">+R$ {s.t1Gain} · R:R 1:{s.rr1}</span>
-        </div>
-        <div className="ladder-divider" style={{ borderColor: dc + '55' }}>
-          <span className="ld-label" style={{ color: dc }}>▶ ENTRADA</span>
-          <span className="ld-value font-mono" style={{ color: dc }}>{s.entry} {s.unit}</span>
-        </div>
-        <div className="ladder-row stop-row">
-          <span className="lr-label stop-lbl">STOP LOSS</span>
-          <span className="lr-value font-mono stop-val">{s.stop}</span>
-          <span className="lr-meta">−R$ {s.stopRisk} / mini</span>
-        </div>
-      </div>
-
-      {s.note && <div className="setup-note">{s.note}</div>}
-
-      <div className="setup-margin-row">
-        <span className="sm-label">Margem mín. por contrato</span>
-        <span className="sm-val font-mono">R$ {s.margin.toLocaleString('pt-BR')}</span>
-      </div>
-    </div>
-  );
+const setupToLadder = (s, unit) => !s ? undefined : {
+  entry: `${s.entry} ${unit ?? s.unit}`,
+  stop: s.stop, stopMeta: `−R$ ${s.stopRisk} / mini`,
+  t1: s.t1, t1Meta: `+R$ ${s.t1Gain} · R:R 1:${s.rr1}`,
+  t2: s.t2, t2Meta: `+R$ ${s.t2Gain} · R:R 1:${s.rr2}`,
 };
 
-// ── Setup card para o ativo pesquisado (usa o resultado do Robô Analista) ────
-
-const CustomAssetSetup = ({ asset, result }) => {
-  if (!result) {
-    return (
-      <div className="tg-setup-card neutral-card">
-        <div className="setup-asset">{asset.icon} {asset.label}</div>
-        <div className="setup-wait">● Rode o Robô Analista Técnico para gerar o setup deste ativo</div>
-      </div>
-    );
-  }
-  if (result.direction === 'SEM OPERAÇÃO') {
-    return (
-      <div className="tg-setup-card neutral-card">
-        <div className="setup-asset">{asset.icon} {asset.label}</div>
-        <div className="setup-wait">⏸ SEM OPERAÇÃO — {result.motivo}</div>
-      </div>
-    );
-  }
-  const isCompra = result.direction === 'COMPRA';
-  const dc = isCompra ? '#00ff88' : '#ff3355';
-  return (
-    <div className="tg-setup-card" style={{ borderColor: dc + '33', background: dc + '06' }}>
-      <div className="setup-asset-row">
-        <span className="setup-asset">{asset.icon} {asset.label}</span>
-        <span className="setup-dir-badge" style={{ color: dc, borderColor: dc + '44', background: dc + '12' }}>
-          {isCompra ? '▲ COMPRAR' : '▼ VENDER'}
-        </span>
-      </div>
-      <div className="setup-ladder">
-        <div className="ladder-row t2-row">
-          <span className="lr-label">ALVO 2</span>
-          <span className="lr-value font-mono">{result.t2}</span>
-        </div>
-        <div className="ladder-row t1-row">
-          <span className="lr-label">ALVO 1</span>
-          <span className="lr-value font-mono">{result.t1}</span>
-        </div>
-        <div className="ladder-divider" style={{ borderColor: dc + '55' }}>
-          <span className="ld-label" style={{ color: dc }}>▶ ENTRADA</span>
-          <span className="ld-value font-mono" style={{ color: dc }}>{result.entry}</span>
-        </div>
-        <div className="ladder-row stop-row">
-          <span className="lr-label stop-lbl">STOP LOSS</span>
-          <span className="lr-value font-mono stop-val">{result.stopL}</span>
-        </div>
-      </div>
-      <div className="setup-note">{result.score}/5 confluências técnicas · {result.prob}% probabilidade</div>
-    </div>
-  );
+const resultToLadder = (result) => !result || result.direction === 'SEM OPERAÇÃO' ? undefined : {
+  entry: result.entry, stop: result.stopL, t1: result.t1, t2: result.t2,
 };
 
 // ── Linha compacta para oportunidades encontradas pelo scanner automático ───
@@ -274,10 +202,10 @@ const OpportunityRow = ({ opp }) => {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, assetResult, opportunities }) => {
+const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, assetResult, opportunities, globalMacro }) => {
   const { checks, verdict, dir, score, conviction } = useMemo(
-    () => evalGuide(macroSignal, lastAlert),
-    [macroSignal, lastAlert],
+    () => evalGuide(macroSignal, lastAlert, globalMacro),
+    [macroSignal, lastAlert, globalMacro],
   );
 
   const winSetup = useMemo(() => calcWinSetup(winPrice, dir, conviction),  [winPrice, dir, conviction]);
@@ -355,9 +283,32 @@ const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, asset
             <>
               <div className="tg-setups-title">Setups para operar agora</div>
               <div className="tg-setups-grid">
-                <SetupCard s={winSetup} verdictColor={v.color} />
-                <SetupCard s={dolSetup} verdictColor={v.color} />
-                {isCustomAsset && <CustomAssetSetup asset={asset} result={assetResult} />}
+                <AssetDirectionCard
+                  icon="🇧🇷" name="WIN Mini (Ibovespa)" sub="WIN MINI"
+                  op={winSetup ? (winSetup.isCompra ? 'COMPRAR' : 'VENDER') : 'AGUARDAR'}
+                  score={score}
+                  tip={winSetup ? `Alvo 1: ${winSetup.t1} · Stop: ${winSetup.stop}` : 'Aguardar sinal direcional claro'}
+                  setup={setupToLadder(winSetup)}
+                />
+                <AssetDirectionCard
+                  icon="💵" name="DOL Mini (Dólar)" sub="DÓLAR"
+                  op={dolSetup ? (dolSetup.isCompra ? 'COMPRAR' : 'VENDER') : 'AGUARDAR'}
+                  score={-score}
+                  tip={dolSetup ? `Alvo 1: ${dolSetup.t1} · Stop: ${dolSetup.stop}` : 'Aguardar sinal direcional claro'}
+                  note={dolSetup?.note ?? 'DOL sobe quando bolsa cai (correlação inversa)'}
+                  setup={setupToLadder(dolSetup)}
+                />
+                {isCustomAsset && (
+                  <AssetDirectionCard
+                    icon={asset.icon ?? '🔎'} name={asset.label} sub={asset.label}
+                    op={!assetResult ? 'AGUARDAR' : assetResult.direction === 'COMPRA' ? 'COMPRAR' : assetResult.direction === 'VENDA' ? 'VENDER' : 'AGUARDAR'}
+                    score={assetResult?.score ?? 0}
+                    tip={!assetResult ? 'Rode o Robô Analista Técnico para gerar o setup deste ativo'
+                       : assetResult.direction === 'SEM OPERAÇÃO' ? `⏸ SEM OPERAÇÃO — ${assetResult.motivo}`
+                       : `${assetResult.score}/5 confluências técnicas · ${assetResult.prob}% probabilidade`}
+                    setup={resultToLadder(assetResult)}
+                  />
+                )}
               </div>
             </>
           )}
@@ -473,55 +424,6 @@ const TradeGuide = ({ macroSignal, lastAlert, winPrice, dolarPrice, asset, asset
         }
         .opp-row-price { font-size: .66rem; color: var(--text-secondary); margin-left: auto; }
         .opp-row-change { font-size: .64rem; font-weight: 800; min-width: 50px; text-align: right; }
-
-        .tg-setup-card {
-          border: 1px solid rgba(255,255,255,.07); border-radius: 12px;
-          padding: .85rem; background: rgba(255,255,255,.02);
-          display: flex; flex-direction: column; gap: .6rem;
-        }
-        .neutral-card { opacity: .5; }
-        .setup-wait { font-size: .7rem; color: var(--text-muted); text-align: center; padding: .8rem 0; }
-
-        .setup-asset-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; }
-        .setup-asset { font-size: .72rem; font-weight: 800; color: var(--text-secondary); }
-        .setup-dir-badge {
-          font-size: .58rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;
-          border: 1px solid; text-transform: uppercase; letter-spacing: .4px;
-        }
-
-        /* Ladder */
-        .setup-ladder { display: flex; flex-direction: column; gap: .28rem; }
-        .ladder-row {
-          display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
-          padding: .35rem .5rem; border-radius: 6px; background: rgba(255,255,255,.02);
-        }
-        .t2-row { border-left: 2px solid rgba(0,255,136,.6); }
-        .t1-row { border-left: 2px solid rgba(74,222,128,.5); }
-        .stop-row { border-left: 2px solid rgba(255,51,85,.5); }
-        .lr-label     { font-size: .52rem; font-weight: 800; color: var(--text-muted); min-width: 52px; text-transform: uppercase; letter-spacing: .05em; }
-        .stop-lbl     { color: #ff3355 !important; }
-        .lr-value     { font-size: .82rem; font-weight: 800; color: var(--text-primary); }
-        .stop-val     { color: #ff3355 !important; }
-        .lr-meta      { font-size: .57rem; color: var(--text-muted); margin-left: auto; }
-
-        .ladder-divider {
-          display: flex; align-items: center; justify-content: space-between;
-          border: 1px solid; border-radius: 6px; padding: .38rem .55rem;
-          background: rgba(255,255,255,.04);
-        }
-        .ld-label { font-size: .6rem; font-weight: 900; letter-spacing: .04em; }
-        .ld-value { font-size: .9rem; font-weight: 900; }
-
-        .setup-note {
-          font-size: .58rem; color: var(--text-muted); font-style: italic;
-          padding: .3rem .4rem; background: rgba(255,255,255,.025); border-radius: 5px;
-        }
-        .setup-margin-row {
-          display: flex; align-items: center; justify-content: space-between;
-          padding-top: .3rem; border-top: 1px solid rgba(255,255,255,.05);
-        }
-        .sm-label { font-size: .56rem; color: var(--text-muted); }
-        .sm-val   { font-size: .7rem; font-weight: 800; color: var(--text-secondary); }
 
         .tg-disclaimer {
           margin-top: .6rem; font-size: .58rem; color: var(--text-muted);

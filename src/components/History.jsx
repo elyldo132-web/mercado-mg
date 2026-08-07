@@ -16,6 +16,7 @@ const History = ({ history }) => {
               <div className="item-header">
                 <span className="item-emoji">🚨</span>
                 <span className="item-summary">{alert.summary}</span>
+                {alert.time && <span className="item-time font-mono">{alert.time}</span>}
               </div>
               <div className="item-indicators font-mono">
                 <span className={alert.impact.dollar === 'Alta' ? 'text-green' : alert.impact.dollar === 'Queda' ? 'text-red' : 'text-muted'}>
@@ -88,7 +89,8 @@ const History = ({ history }) => {
           margin-bottom: 0.35rem;
         }
         .item-emoji { font-size: 0.9rem; }
-        .item-summary { font-size: 0.85rem; font-weight: 500; color: var(--text-primary); }
+        .item-summary { font-size: 0.85rem; font-weight: 500; color: var(--text-primary); flex: 1; }
+        .item-time { font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
         .item-indicators {
           display: flex;
           flex-wrap: wrap;

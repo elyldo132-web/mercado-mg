@@ -78,7 +78,7 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection }) => {
+const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection, winIsLive }) => {
   // Cor do WIN segue o sentimento consolidado; DOL segue invertido (dólar sobe quando bolsa cai)
   const winColor = direction === 'COMPRA' ? '#00ff88' : direction === 'VENDA' ? '#ff3355' : '#00f5d4';
   const dolColor = direction === 'COMPRA' ? '#ff3355' : direction === 'VENDA' ? '#00ff88' : 'var(--accent-gold)';
@@ -234,6 +234,9 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
           <div className="sub-header">
             <div className="asset-info">
               <span className="asset-name">WIN (MINI IBOV) - M5</span>
+              <span className={`live-badge ${winIsLive ? 'live' : 'stale'}`}>
+                {winIsLive ? '● AO VIVO' : '⚠ SEM COTAÇÃO REAL'}
+              </span>
               <span className={`asset-change font-mono ${calculateChange('win') >= 0 ? 'text-green' : 'text-red'}`}>
                 {calculateChange('win')}%
               </span>
@@ -383,7 +386,7 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
 
         .secondary-charts {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          grid-template-columns: 1fr;
           gap: 1rem;
         }
 
@@ -432,6 +435,16 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
           font-size: 0.7rem;
           margin-top: 2px;
         }
+
+        .live-badge {
+          font-size: 0.55rem;
+          font-weight: 800;
+          letter-spacing: 0.03em;
+          margin-top: 3px;
+          width: fit-content;
+        }
+        .live-badge.live { color: #00ff88; }
+        .live-badge.stale { color: #fbbf24; }
 
         .asset-price {
           font-size: 1.25rem;

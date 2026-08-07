@@ -15,20 +15,25 @@ export const isB3Open = (date = new Date()) => {
 };
 
 // Ticker 24h da Binance — API pública, sem necessidade de proxy/CORS
-export const fetchBTC24h = async () => {
-  const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', {
+export const fetchBinance24h = async (symbol) => {
+  const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`, {
     cache: 'no-store',
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error(`Binance HTTP ${r.status}`);
   const d = await r.json();
-  return { price: parseFloat(d.lastPrice), changePct: parseFloat(d.priceChangePercent) };
+  return { price: parseFloat(d.lastPrice), change: parseFloat(d.priceChangePercent) };
 };
 
-// Futuros do S&P 500 (ES=F) via Yahoo Finance, com proxy
-export const fetchSPFutures = async () => {
+export const fetchBTC24h = async () => {
+  const d = await fetchBinance24h('BTCUSDT');
+  return { price: d.price, changePct: d.change };
+};
+
+// Cotação genérica via Yahoo Finance (com proxy) — usada pra WIN, S&P, Nasdaq, DXY, VIX, USD/BRL etc.
+export const fetchYahooQuote = async (symbol) => {
   const PROXY = 'https://api.allorigins.win/raw?url=';
-  const url   = 'https://query1.finance.yahoo.com/v8/finance/chart/ES%3DF?range=1d&interval=5m';
+  const url   = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
   try {
     const res  = await fetch(`${PROXY}${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
     const json = await res.json();
@@ -43,6 +48,9 @@ export const fetchSPFutures = async () => {
     return null;
   }
 };
+
+// Futuros do S&P 500 (ES=F) via Yahoo Finance — mantido por compatibilidade
+export const fetchSPFutures = () => fetchYahooQuote('ES=F');
 
 // Score de risco-on/off (cripto + internacional) — mesma escala usada na Diretriz do Dia
 export const computeCryptoScore = (btcChangePct, spChangePct) =>

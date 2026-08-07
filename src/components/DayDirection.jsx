@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { isB3Open, fetchBTC24h, fetchSPFutures, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
+import AssetDirectionCard from './AssetDirectionCard';
 
 // ── Day-of-week patterns (B3 historical tendencies) ─────────────────────────
 
@@ -253,31 +254,24 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
         </>
       ) : (
         <>
-          {/* ── VEREDITO ──────────────────────────────────────────── */}
-          <div className="dd-verdict" style={{ background: 'var(--dbg)', borderColor: 'var(--db)' }}>
-            <div className="ddv-icon" style={{ color: dir.color, textShadow: `0 0 20px ${dir.color}` }}>
-              {dir.icon}
+          {/* ── JANELA DE TRADE ──────────────────────────────────────── */}
+          {dir.key !== 'NEUTRO' && (
+            <div className={`dd-window-note ${phase.ok ? '' : 'warn'}`}>
+              {phase.ok ? '🟢 Você está na janela de trade — boa hora para entrar' : '⏸ Fora da janela ideal — espere o horário certo'}
             </div>
-            <div className="ddv-main">
-              <div className="ddv-label">DIRETRIZ DE HOJE</div>
-              <div className="ddv-dir" style={{ color: dir.color }}>{dir.label}</div>
-              {phase.ok && dir.key !== 'NEUTRO' && (
-                <div className="ddv-window">🟢 Você está na janela de trade — boa hora para entrar</div>
-              )}
-              {!phase.ok && dir.key !== 'NEUTRO' && (
-                <div className="ddv-window warn">⏸ Fora da janela ideal — espere o horário certo</div>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* ── ATIVOS ────────────────────────────────────────────── */}
           <div className="dd-assets">
             <div className="dd-sect-title">O que operar hoje</div>
-            <div className={`dd-assets-grid ${isCustomAsset ? 'dd-assets-grid-3' : ''}`}>
-              <AssetBox asset="WIN Mini (Ibovespa)" op={dir.winOp} tip={dir.winTip} dir={dir} />
-              <AssetBox asset="DOL Mini (Dólar)"    op={dir.dolOp} tip={dir.dolTip} dir={dir} />
+            <div className={`dd-cards-grid ${isCustomAsset ? 'dd-cards-grid-3' : ''}`}>
+              <AssetDirectionCard icon="🇧🇷" name="WIN Mini (Ibovespa)" sub="WIN MINI" op={dir.winOp} score={dayScore} tip={dir.winTip} />
+              <AssetDirectionCard icon="💵" name="DOL Mini (Dólar)" sub="DÓLAR" op={dir.dolOp} score={-dayScore} tip={dir.dolTip} note="Correlação inversa ao WIN" />
               {isCustomAsset && (
-                <AssetBox asset={`${asset.icon ?? '🔎'} ${asset.label}`} op={customOp} tip={customTip} dir={dir} />
+                <AssetDirectionCard
+                  icon={asset.icon ?? '🔎'} name={asset.label} sub={asset.label}
+                  op={customOp} score={assetResult?.score ?? 0} tip={customTip}
+                />
               )}
             </div>
           </div>
@@ -380,11 +374,22 @@ const DayDirection = ({ macroSignal, lastAlert, asset, assetResult }) => {
         }
         .dd-toggle:hover { background: rgba(255,255,255,.06); color: var(--text-secondary); }
 
+        .dd-window-note {
+          font-size: .64rem; font-weight: 700; color: #00ff88;
+          padding: .5rem .7rem; border-radius: 8px; margin-bottom: .9rem;
+          background: rgba(0,255,136,.06); border: 1px solid rgba(0,255,136,.2);
+        }
+        .dd-window-note.warn {
+          color: #fbbf24; background: rgba(251,191,36,.06); border-color: rgba(251,191,36,.2);
+        }
+
         /* Assets */
         .dd-assets { margin-bottom: .9rem; }
         .dd-assets-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
         .dd-assets-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-        @media (max-width: 600px) { .dd-assets-grid, .dd-assets-grid-3 { grid-template-columns: 1fr; } }
+        .dd-cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+        .dd-cards-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+        @media (max-width: 600px) { .dd-assets-grid, .dd-assets-grid-3, .dd-cards-grid, .dd-cards-grid-3 { grid-template-columns: 1fr; } }
         .dd-asset-box { border: 1px solid; border-radius: 10px; padding: .7rem .8rem; }
         .dab-header { display: flex; align-items: center; justify-content: space-between; gap: .4rem; margin-bottom: .35rem; }
         .dab-asset { font-size: .67rem; font-weight: 800; color: var(--text-secondary); }

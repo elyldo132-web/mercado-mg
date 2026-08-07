@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Header from './Header';
-import NewsInput from './NewsInput';
+import Sidebar from './Sidebar';
 import MacroAlert from './MacroAlert';
 import History from './History';
+import NewsFeed from './NewsFeed';
 import OpportunityScanner from './OpportunityScanner';
 import WinAnalysis from './WinAnalysis';
 import SignalPanel from './SignalPanel';
 import DayDirection from './DayDirection';
 import MarketCharts from './MarketCharts';
 import TradeGuide from './TradeGuide';
+import ResumoGeral from './ResumoGeral';
 import TechAnalysisBot from './TechAnalysisBot';
 import BankPositions from './BankPositions';
 import BrokerConfig from './BrokerConfig';
@@ -19,7 +21,8 @@ import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
 import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
 import { scanRealOpportunities } from '../utils/OpportunityScan';
-import { fetchBTC24h, fetchSPFutures, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
+import { fetchBTC24h, fetchSPFutures, fetchYahooQuote, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
+import { computeMacroScore } from '../utils/MacroScore';
 
 // ── Pesquisa de ativos para simulação ────────────────────────────────────────
 const PROXIES = [
@@ -285,12 +288,17 @@ const SimSearchBar = ({ onSelect }) => {
 
 
 const Dashboard = ({ onLogout }) => {
-  const [news, setNews] = useState('');
   const [lastAlert, setLastAlert] = useState(null);
   const [history, setHistory] = useState(() => {
     const saved = localStorage.getItem('mercado_mg_history');
     return saved ? JSON.parse(saved) : [];
   });
+  const [newsFeed, setNewsFeed] = useState(() => {
+    const saved = localStorage.getItem('mercado_mg_newsfeed');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const newsFeedRef = useRef([]);
+  useEffect(() => { newsFeedRef.current = newsFeed; }, [newsFeed]);
   const [chartData, setChartData] = useState(() => {
     return Array.from({ length: 15 }, (_, i) => {
       const baseWin = 125000 + (Math.random() * 600 - 300);
@@ -311,20 +319,22 @@ const Dashboard = ({ onLogout }) => {
     });
   });
   const [winPrice, setWinPrice] = useState(() => chartData[14]?.win || 125432);
+  const [winIsLive, setWinIsLive] = useState(false); // true só quando a cotação real do Ibovespa chegou há pouco
+  const winLastUpdateRef = useRef(null);
   const [dolarPrice, setDolarPrice] = useState(() => chartData[14]?.dolar || 5.0234);
   const [activeTicker, setActiveTicker] = useState(null);
   const [activeTickerPrice, setActiveTickerPrice] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
-  const [correlation, setCorrelation] = useState(-0.85); // Padrão inverso
   const [marketRegime, setMarketRegime] = useState('NORMAL');
   const [toast, setToast] = useState(null);
   const [macroSignal, setMacroSignal] = useState(null);
   const [searchedAsset, setSearchedAsset] = useState({ key: 'WIN', label: 'WIN Mini', icon: '📊', group: 'futuros' });
   const [searchedAssetResult, setSearchedAssetResult] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
-  const [showCharts, setShowCharts] = useState(false);
   const [btcChange24h, setBtcChange24h] = useState(null);
   const [spChange, setSpChange] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalMacro, setGlobalMacro] = useState(null);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -437,7 +447,10 @@ const Dashboard = ({ onLogout }) => {
     return num / den;
   }, []);
 
-  const processNewAlert = useCallback((alert, time) => {
+  const processNewAlert = useCallback((rawAlert, time) => {
+    // Evita empilhar a mesma manchete repetida (o feed às vezes sorteia o mesmo item do lote)
+    if (historyRef.current.slice(0, 3).some(h => h.summary === rawAlert.summary)) return;
+    const alert = { ...rawAlert, time: time || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
     const newHistory = [alert, ...historyRef.current].slice(0, 25);
     setHistory(newHistory);
     historyRef.current = newHistory;
@@ -460,30 +473,24 @@ const Dashboard = ({ onLogout }) => {
     setChartData(prev => {
       const last = prev[prev.length - 1];
       let newSentiment = last.sentiment;
-      let newWin = last.win;
       let newDolar = last.dolar;
-      
-      // WIN Impact
-      if (alert.impact.win === 'Alta') newWin += Math.random() * 400 + 100;
-      if (alert.impact.win === 'Queda') newWin -= Math.random() * 400 + 100;
-      
+
       // Dolar Impact
       if (alert.impact.dollar === 'Alta') newDolar += Math.random() * 0.03 + 0.01;
       if (alert.impact.dollar === 'Queda') newDolar -= Math.random() * 0.03 + 0.01;
 
       // Adicionar ruído de mercado
-      newWin += Math.random() * 50 - 25;
       newDolar += Math.random() * 0.005 - 0.0025;
 
       // Sentiment
       if (alert.impact.win === 'Alta') newSentiment += 12;
       if (alert.impact.win === 'Queda') newSentiment -= 12;
       newSentiment = Math.max(10, Math.min(90, newSentiment + (Math.random() * 6 - 3)));
-      
-      const updatedWin = Math.floor(newWin);
+
+      // WIN não é mais movido por notícia — vem do pregão real (poll do ^BVSP)
+      const updatedWin = last.win;
       const updatedDolar = parseFloat(newDolar.toFixed(4));
-      
-      setWinPrice(updatedWin);
+
       setDolarPrice(updatedDolar);
 
       let newActiveVal = last.activeAssetVal || (activeTicker ? Math.random() * 80 + 20 : 0);
@@ -524,8 +531,7 @@ const Dashboard = ({ onLogout }) => {
 
       // Calculate Correlation & Regime
       const corrValue = calculateCorrelation(nextPoints);
-      setCorrelation(parseFloat(corrValue.toFixed(2)));
-      
+
       const impactsFelt = (alert.impact.win !== 'Neutro' ? 1 : 0) + (alert.impact.dollar !== 'Neutro' ? 1 : 0);
       
       if (corrValue > 0.5) setMarketRegime('CORR_ANOMALY');
@@ -561,6 +567,20 @@ const Dashboard = ({ onLogout }) => {
     // Iniciar feed automático
     const stopFeed = startNewsFeed((incomingNews) => {
       setLiveFeedSource(incomingNews.source || 'Simulado');
+
+      // Feed bruto de notícias (tudo que chega, relevante ou não) — dedup contra as últimas 3
+      if (!newsFeedRef.current.slice(0, 3).some(n => n.text === incomingNews.text)) {
+        const item = {
+          text: incomingNews.text,
+          source: incomingNews.source || (incomingNews.live ? 'Feed ao vivo' : '⚠️ Offline (simulado)'),
+          time: incomingNews.time || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        };
+        const nextFeed = [item, ...newsFeedRef.current].slice(0, 30);
+        setNewsFeed(nextFeed);
+        newsFeedRef.current = nextFeed;
+        localStorage.setItem('mercado_mg_newsfeed', JSON.stringify(nextFeed));
+      }
+
       const result = analyzeNews(incomingNews.text);
       if (result !== 'IGNORAR') {
         processNewAlert(result, incomingNews.time);
@@ -579,6 +599,15 @@ const Dashboard = ({ onLogout }) => {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Macro Score global (DXY/VIX/Treasury/S&P/Nasdaq/BTC/ETH/Ouro/Petróleo) — alimenta o Guia de Trade
+  useEffect(() => {
+    let alive = true;
+    const load = () => computeMacroScore().then(r => { if (alive) setGlobalMacro(r); }).catch(() => {});
+    load();
+    const t = setInterval(load, 180000); // a cada 3 min
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   // BTC 24h + futuros S&P 500 — alimenta o indicador de cripto nos gráficos de preço
   useEffect(() => {
     let alive = true;
@@ -589,6 +618,45 @@ const Dashboard = ({ onLogout }) => {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // WIN real — cotação do Ibovespa (^BVSP), mesmo proxy real usado no ticker superior.
+  // Substitui a simulação: a linha do WIN passa a refletir o pregão de verdade.
+  useEffect(() => {
+    let alive = true;
+    let backfilled = false; // primeira cotação real: substitui todo o histórico simulado, evitando um "salto" falso no gráfico
+    const loadWinReal = () => {
+      fetchYahooQuote('^BVSP').then(q => {
+        if (!alive || !q) return;
+        const realWin = Math.round(q.price);
+        setWinPrice(realWin);
+        winLastUpdateRef.current = Date.now();
+        setWinIsLive(true);
+        setChartData(prev => {
+          if (prev.length === 0) return prev;
+          if (!backfilled) {
+            backfilled = true;
+            return prev.map(p => ({ ...p, win: realWin }));
+          }
+          const next = [...prev];
+          next[next.length - 1] = { ...next[next.length - 1], win: realWin };
+          return next;
+        });
+      }).catch(() => {});
+    };
+    loadWinReal();
+    const t = setInterval(loadWinReal, 30000); // a cada 30s
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // Marca o WIN como "não ao vivo" se a última cotação real tiver mais de 90s
+  // (ex: proxy do Yahoo fora do ar) — evita mostrar preço desatualizado como se fosse ao vivo.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const fresh = !!winLastUpdateRef.current && (Date.now() - winLastUpdateRef.current) < 90000;
+      setWinIsLive(fresh);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
   // Market Pulse: Pequenas oscilações para manter o dashboard "vivo"
   useEffect(() => {
     const pulse = setInterval(() => {
@@ -596,21 +664,18 @@ const Dashboard = ({ onLogout }) => {
         if (prev.length === 0) return prev;
         const last = { ...prev[prev.length - 1] };
         
-        // Oscilações leves (ruído de mercado)
-        const winDrift = (Math.random() * 30 - 15);
+        // Oscilações leves (ruído de mercado) — WIN não entra mais aqui, vem do pregão real
         const dolarDrift = (Math.random() * 0.002 - 0.001);
         const btcDrift = (Math.random() * 60 - 30);
 
-        last.win = Math.floor(last.win + winDrift);
         last.dolar = parseFloat((last.dolar + dolarDrift).toFixed(4));
         last.btc = Math.floor((last.btc || 67000) + btcDrift);
-        
+
         if (activeTicker) {
           last.activeAssetVal = parseFloat((last.activeAssetVal + (Math.random() * 0.2 - 0.1)).toFixed(2));
           setActiveTickerPrice(last.activeAssetVal);
         }
 
-        setWinPrice(last.win);
         setDolarPrice(last.dolar);
 
         // Atualizar P/L de todas as posições no pulso
@@ -639,29 +704,6 @@ const Dashboard = ({ onLogout }) => {
 
     return () => clearInterval(pulse);
   }, [activeTicker]);
-
-  const handleAnalyze = () => {
-    if (!news.trim()) {
-      showToast('Digite uma notícia para análise', 'warning');
-      return;
-    }
-    
-    const tickerMatch = detectTicker(news);
-    if (tickerMatch) {
-      setActiveTicker(tickerMatch);
-      setActiveTickerPrice(Math.random() * 80 + 20); // Simular preço base inicial
-    }
-
-    const result = analyzeNews(news);
-    setLastAlert(result);
-    
-    if (result !== 'IGNORAR') {
-      processNewAlert(result);
-      showToast('Análise concluída e alertas atualizados', 'success');
-    } else {
-      showToast('Notícia ignorada pelo terminal', 'info');
-    }
-  };
 
   const handleSelectCrypto = (ticker, price) => {
     setActiveTicker(ticker);
@@ -719,75 +761,70 @@ const Dashboard = ({ onLogout }) => {
 
   return (
     <div className={`dashboard regime-${marketRegime.toLowerCase()}`}>
-      <Header 
-        isMuted={isMuted} 
-        toggleMute={toggleMute} 
-        correlation={correlation}
-        marketRegime={marketRegime}
-        onLogout={onLogout}
-        balance={balance}
-        view={view}
-        setView={setView}
-      />
-      {toast && (
-        <div className={`toast-notification ${toast.type}`} role="status" aria-live="polite">
-          {toast.message}
-        </div>
-      )}
-      {view === 'market' && (
-        <div className="globe-bg animate-fade-in">
-          <img src="/fundo.jpg" alt="Background" />
-          <div className="globe-overlay"></div>
-        </div>
-      )}
-      
-      <main className="main-content container relative-z">
-        {view === 'market' ? (
+      <Sidebar view={view} setView={setView} mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="dashboard-main">
+        <Header
+          isMuted={isMuted}
+          toggleMute={toggleMute}
+          onLogout={onLogout}
+          onMenuClick={() => setSidebarOpen(v => !v)}
+        />
+        {toast && (
+          <div className={`toast-notification ${toast.type}`} role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
+        {view === 'market' && (
+          <div className="globe-bg animate-fade-in">
+            <img src="/fundo.jpg" alt="Background" />
+            <div className="globe-overlay"></div>
+          </div>
+        )}
+
+        <main className="main-content container relative-z">
+        {view === 'resumo' ? (
+          <ResumoGeral globalMacro={globalMacro} />
+        ) : view === 'market' ? (
           <div className="market-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
 
             <DayDirection macroSignal={macroSignal} lastAlert={lastAlert} asset={searchedAsset} assetResult={searchedAssetResult} />
 
             <WinAnalysis currentWin={winPrice} currentDolar={dolarPrice} onSignal={setMacroSignal} lastAlert={lastAlert} asset={searchedAsset} />
 
-            <div className="charts-toggle-wrap">
-              <button className="charts-toggle-btn" onClick={() => setShowCharts(v => !v)}>
-                {showCharts ? 'Ocultar gráficos de preço ▲' : '📈 Ver gráficos de preço (WIN, Dólar, Sentimento) ▼'}
-              </button>
-            </div>
-            {showCharts && (
-              <MarketCharts
-                data={chartData}
-                currentWin={winPrice}
-                currentDolar={dolarPrice}
-                currentBtc={chartData[chartData.length - 1]?.btc}
-                direction={macroSignal?.direction}
-                cryptoDirection={cryptoDirection}
-              />
-            )}
-
-            <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} opportunities={opportunities} />
+            <TradeGuide macroSignal={macroSignal} lastAlert={lastAlert} winPrice={winPrice} dolarPrice={dolarPrice} asset={searchedAsset} assetResult={searchedAssetResult} opportunities={opportunities} globalMacro={globalMacro} />
 
             <TechAnalysisBot onAssetChange={setSearchedAsset} onResult={setSearchedAssetResult} />
 
             <BankPositions macroSignal={macroSignal} asset={searchedAsset} />
 
             <SignalPanel macroSignal={macroSignal} lastAlert={lastAlert} />
-
+          </div>
+        ) : view === 'charts' ? (
+          <div className="charts-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
+            <MarketCharts
+              data={chartData}
+              currentWin={winPrice}
+              currentDolar={dolarPrice}
+              currentBtc={chartData[chartData.length - 1]?.btc}
+              direction={macroSignal?.direction}
+              cryptoDirection={cryptoDirection}
+              winIsLive={winIsLive}
+            />
+          </div>
+        ) : view === 'news' ? (
+          <div className="news-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
             <div className="layout-grid">
               <div className="left-panel">
-                <NewsInput 
-                  news={news} 
-                  setNews={setNews} 
-                  onAnalyze={handleAnalyze} 
-                />
+                <NewsFeed items={newsFeed} />
+              </div>
+              <div className="right-panel">
                 {lastAlert === 'IGNORAR' && (
                   <div className="status-badge ignore-badge">IGNORAR</div>
                 )}
                 {lastAlert && lastAlert !== 'IGNORAR' && (
                   <MacroAlert alert={lastAlert} />
                 )}
-              </div>
-              <div className="right-panel">
                 <History history={history} />
               </div>
             </div>
@@ -831,23 +868,25 @@ const Dashboard = ({ onLogout }) => {
             <BrokerConfig />
           </div>
         ) : null}
-      </main>
+        </main>
+      </div>
 
       <style jsx="true">{`
-        .charts-toggle-wrap { margin-bottom: 1rem; }
-        .charts-toggle-btn {
-          width: 100%; font-size: .68rem; font-weight: 700; color: var(--text-muted);
-          background: rgba(255,255,255,.03); border: 1px solid rgba(99,149,255,.15);
-          border-radius: 10px; padding: .6rem .8rem; cursor: pointer; transition: all .15s;
-        }
-        .charts-toggle-btn:hover { background: rgba(255,255,255,.06); color: var(--text-secondary); }
-
         .dashboard {
           flex: 1;
           display: flex;
+          flex-direction: row;
+          align-items: stretch;
+          min-height: 100vh;
+          transition: background-color 0.5s;
+        }
+
+        .dashboard-main {
+          flex: 1;
+          min-width: 0;
+          display: flex;
           flex-direction: column;
           padding-bottom: 2rem;
-          transition: background-color 0.5s;
         }
 
         .regime-corr_anomaly {

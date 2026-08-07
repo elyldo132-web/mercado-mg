@@ -122,6 +122,7 @@ async function fetchRSSSource(src) {
 
 let lastItems = [];
 let sourceIdx = 0;
+let lastPickedText = null;
 
 const fetchLiveNews = async () => {
   const attempts = [...RSS_SOURCES.slice(sourceIdx), ...RSS_SOURCES.slice(0, sourceIdx)];
@@ -132,7 +133,12 @@ const fetchLiveNews = async () => {
     try {
       const { items, name } = await fetchRSSSource(src);
       lastItems = items;
-      const pick = items[Math.floor(Math.random() * Math.min(items.length, 8))];
+      const pool = items.slice(0, Math.min(items.length, 8));
+      let pick = pool[Math.floor(Math.random() * pool.length)];
+      if (pool.length > 1 && pick.text === lastPickedText) {
+        pick = pool.find(p => p.text !== lastPickedText) || pick;
+      }
+      lastPickedText = pick.text;
       return {
         text:   pick.text,
         source: pick.source || name,

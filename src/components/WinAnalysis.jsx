@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchYahooQuote } from '../utils/MarketStatus';
 
 // ── Macro scoring functions ──────────────────────────────────────────────────
 
@@ -202,7 +203,7 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
         fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/2?formato=json').then(r => r.json()),
         fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados/ultimos/1?formato=json').then(r => r.json()),
         fetch('https://open.er-api.com/v6/latest/USD').then(r => r.json()),
-        fetch('https://brapi.dev/api/quote/%5EBVSP').then(r => r.json()),
+        fetchYahooQuote('^BVSP'),
       ]);
 
       // ── SELIC
@@ -228,12 +229,9 @@ const WinAnalysis = ({ currentWin, currentDolar, onSignal, lastAlert, asset }) =
       // ── IBOV
       let ibovPrice = currentWin || 135000;
       let ibovChangePct = null;
-      if (ibovRes.status === 'fulfilled') {
-        const r = ibovRes.value?.results?.[0];
-        if (r?.regularMarketPrice) {
-          ibovPrice     = r.regularMarketPrice;
-          ibovChangePct = r.regularMarketChangePercent ?? null;
-        }
+      if (ibovRes.status === 'fulfilled' && ibovRes.value) {
+        ibovPrice     = ibovRes.value.price;
+        ibovChangePct = ibovRes.value.change ?? null;
       }
       prevIbovRef.current = Math.round(ibovPrice);
       const ibovChange = ibovChangePct;
