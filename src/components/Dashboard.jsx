@@ -287,6 +287,56 @@ const SimSearchBar = ({ onSelect }) => {
 };
 
 
+const REAL_PRICE_STALE_MS = 90000; // se a última cotação real tiver mais que isso, marca como "não ao vivo"
+
+// Hook genérico: busca uma cotação real periodicamente, faz backfill de todo o histórico do
+// gráfico na primeira vez que chega (evita salto artificial entre valor simulado e real) e
+// marca "ao vivo" só enquanto a última atualização for recente.
+const useRealPrice = (fetcher, { field, setPrice, setChartData, round = (n) => n, intervalMs = 30000 }) => {
+  const [isLive, setIsLive] = useState(false);
+  const lastUpdateRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    let backfilled = false;
+    const load = () => {
+      fetcher().then(q => {
+        if (!alive || !q) return;
+        const price = round(q.price);
+        setPrice?.(price);
+        lastUpdateRef.current = Date.now();
+        setIsLive(true);
+        // A mutação de "backfilled" precisa ficar FORA da função passada a setChartData:
+        // em StrictMode o React chama updaters de estado duas vezes pra checar pureza, e uma
+        // função impura (que muda uma variável externa) vê valores diferentes em cada chamada.
+        const doBackfill = !backfilled;
+        backfilled = true;
+        setChartData(prev => {
+          if (prev.length === 0) return prev;
+          if (doBackfill) {
+            return prev.map(p => ({ ...p, [field]: price }));
+          }
+          const next = [...prev];
+          next[next.length - 1] = { ...next[next.length - 1], [field]: price };
+          return next;
+        });
+      }).catch(() => {});
+    };
+    load();
+    const t = setInterval(load, intervalMs);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setIsLive(!!lastUpdateRef.current && (Date.now() - lastUpdateRef.current) < REAL_PRICE_STALE_MS);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  return isLive;
+};
+
 const Dashboard = ({ onLogout }) => {
   const [lastAlert, setLastAlert] = useState(null);
   const [history, setHistory] = useState(() => {
@@ -319,8 +369,6 @@ const Dashboard = ({ onLogout }) => {
     });
   });
   const [winPrice, setWinPrice] = useState(() => chartData[14]?.win || 125432);
-  const [winIsLive, setWinIsLive] = useState(false); // true só quando a cotação real do Ibovespa chegou há pouco
-  const winLastUpdateRef = useRef(null);
   const [dolarPrice, setDolarPrice] = useState(() => chartData[14]?.dolar || 5.0234);
   const [activeTicker, setActiveTicker] = useState(null);
   const [activeTickerPrice, setActiveTickerPrice] = useState(0);
@@ -473,25 +521,15 @@ const Dashboard = ({ onLogout }) => {
     setChartData(prev => {
       const last = prev[prev.length - 1];
       let newSentiment = last.sentiment;
-      let newDolar = last.dolar;
-
-      // Dolar Impact
-      if (alert.impact.dollar === 'Alta') newDolar += Math.random() * 0.03 + 0.01;
-      if (alert.impact.dollar === 'Queda') newDolar -= Math.random() * 0.03 + 0.01;
-
-      // Adicionar ruído de mercado
-      newDolar += Math.random() * 0.005 - 0.0025;
 
       // Sentiment
       if (alert.impact.win === 'Alta') newSentiment += 12;
       if (alert.impact.win === 'Queda') newSentiment -= 12;
       newSentiment = Math.max(10, Math.min(90, newSentiment + (Math.random() * 6 - 3)));
 
-      // WIN não é mais movido por notícia — vem do pregão real (poll do ^BVSP)
+      // WIN e Dólar não são mais movidos por notícia — vêm das cotações reais (useRealPrice)
       const updatedWin = last.win;
-      const updatedDolar = parseFloat(newDolar.toFixed(4));
-
-      setDolarPrice(updatedDolar);
+      const updatedDolar = last.dolar;
 
       let newActiveVal = last.activeAssetVal || (activeTicker ? Math.random() * 80 + 20 : 0);
       if (activeTicker) {
@@ -618,44 +656,11 @@ const Dashboard = ({ onLogout }) => {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  // WIN real — cotação do Ibovespa (^BVSP), mesmo proxy real usado no ticker superior.
-  // Substitui a simulação: a linha do WIN passa a refletir o pregão de verdade.
-  useEffect(() => {
-    let alive = true;
-    let backfilled = false; // primeira cotação real: substitui todo o histórico simulado, evitando um "salto" falso no gráfico
-    const loadWinReal = () => {
-      fetchYahooQuote('^BVSP').then(q => {
-        if (!alive || !q) return;
-        const realWin = Math.round(q.price);
-        setWinPrice(realWin);
-        winLastUpdateRef.current = Date.now();
-        setWinIsLive(true);
-        setChartData(prev => {
-          if (prev.length === 0) return prev;
-          if (!backfilled) {
-            backfilled = true;
-            return prev.map(p => ({ ...p, win: realWin }));
-          }
-          const next = [...prev];
-          next[next.length - 1] = { ...next[next.length - 1], win: realWin };
-          return next;
-        });
-      }).catch(() => {});
-    };
-    loadWinReal();
-    const t = setInterval(loadWinReal, 30000); // a cada 30s
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-
-  // Marca o WIN como "não ao vivo" se a última cotação real tiver mais de 90s
-  // (ex: proxy do Yahoo fora do ar) — evita mostrar preço desatualizado como se fosse ao vivo.
-  useEffect(() => {
-    const t = setInterval(() => {
-      const fresh = !!winLastUpdateRef.current && (Date.now() - winLastUpdateRef.current) < 90000;
-      setWinIsLive(fresh);
-    }, 5000);
-    return () => clearInterval(t);
-  }, []);
+  // WIN, Dólar e BTC reais — mesmas fontes já usadas no ticker superior (Yahoo/Binance).
+  // Substituem a simulação: os três gráficos passam a refletir o mercado de verdade.
+  const winIsLive   = useRealPrice(() => fetchYahooQuote('^BVSP'),   { field: 'win',   setPrice: setWinPrice,   setChartData, round: Math.round });
+  const dolarIsLive = useRealPrice(() => fetchYahooQuote('USDBRL=X'), { field: 'dolar', setPrice: setDolarPrice, setChartData, round: (n) => parseFloat(n.toFixed(4)) });
+  const btcIsLive   = useRealPrice(fetchBTC24h,                       { field: 'btc',   setPrice: null,          setChartData, round: Math.floor });
 
   // Market Pulse: Pequenas oscilações para manter o dashboard "vivo"
   useEffect(() => {
@@ -663,20 +668,12 @@ const Dashboard = ({ onLogout }) => {
       setChartData(prev => {
         if (prev.length === 0) return prev;
         const last = { ...prev[prev.length - 1] };
-        
-        // Oscilações leves (ruído de mercado) — WIN não entra mais aqui, vem do pregão real
-        const dolarDrift = (Math.random() * 0.002 - 0.001);
-        const btcDrift = (Math.random() * 60 - 30);
 
-        last.dolar = parseFloat((last.dolar + dolarDrift).toFixed(4));
-        last.btc = Math.floor((last.btc || 67000) + btcDrift);
-
+        // WIN, Dólar e BTC não entram mais aqui — vêm das cotações reais (useRealPrice)
         if (activeTicker) {
           last.activeAssetVal = parseFloat((last.activeAssetVal + (Math.random() * 0.2 - 0.1)).toFixed(2));
           setActiveTickerPrice(last.activeAssetVal);
         }
-
-        setDolarPrice(last.dolar);
 
         // Atualizar P/L de todas as posições no pulso
         setPositions(currentPos => {
@@ -810,6 +807,8 @@ const Dashboard = ({ onLogout }) => {
               direction={macroSignal?.direction}
               cryptoDirection={cryptoDirection}
               winIsLive={winIsLive}
+              dolarIsLive={dolarIsLive}
+              btcIsLive={btcIsLive}
             />
           </div>
         ) : view === 'news' ? (

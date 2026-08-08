@@ -78,7 +78,7 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection, winIsLive }) => {
+const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection, winIsLive, dolarIsLive, btcIsLive }) => {
   // Cor do WIN segue o sentimento consolidado; DOL segue invertido (dólar sobe quando bolsa cai)
   const winColor = direction === 'COMPRA' ? '#00ff88' : direction === 'VENDA' ? '#ff3355' : '#00f5d4';
   const dolColor = direction === 'COMPRA' ? '#ff3355' : direction === 'VENDA' ? '#00ff88' : 'var(--accent-gold)';
@@ -277,6 +277,9 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
           <div className="sub-header">
             <div className="asset-info">
               <span className="asset-name">DÓLAR (USD/BRL) - M5</span>
+              <span className={`live-badge ${dolarIsLive ? 'live' : 'stale'}`}>
+                {dolarIsLive ? '● AO VIVO' : '⚠ SEM COTAÇÃO REAL'}
+              </span>
               <span className={`asset-change font-mono ${calculateChange('dolar') >= 0 ? 'text-green' : 'text-red'}`}>
                 {calculateChange('dolar')}%
               </span>
@@ -317,6 +320,9 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
           <div className="sub-header">
             <div className="asset-info">
               <span className="asset-name">🪙 BTC/USD - M5</span>
+              <span className={`live-badge ${btcIsLive ? 'live' : 'stale'}`}>
+                {btcIsLive ? '● AO VIVO' : '⚠ SEM COTAÇÃO REAL'}
+              </span>
               <span className={`asset-change font-mono ${calculateChange('btc') >= 0 ? 'text-green' : 'text-red'}`}>
                 {calculateChange('btc')}%
               </span>

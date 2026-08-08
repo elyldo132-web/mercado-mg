@@ -142,18 +142,22 @@ export const fetchBrazilianStockPrice = async (ticker) => {
   });
 };
 
+// Brapi (tier anônimo) só permite 1 requisição por vez, com no máximo 3 tickers nela — pedidos
+// extras (em lote ou em sequência rápida) voltam 401. Por isso cortamos pros 3 primeiros tickers
+// e fazemos uma única chamada, em vez de arriscar o lote inteiro cair pro fallback simulado.
 export const fetchBrazilianStocksBatch = async (tickers = ['PETR4', 'VALE3', 'ITUB4', 'MGLU3']) => {
   return safeCall(async () => {
-    const tickerList = tickers.join(',');
+    const tickerList = tickers.slice(0, 3).join(',');
     const json = await fetchJson(`https://brapi.dev/api/quote/${tickerList}`);
-    if (!json?.results || json.results.length === 0) {
+    const results = json?.results || [];
+    if (results.length === 0) {
       throw new Error('Nenhuma ação encontrada');
     }
     return {
       source: 'Brapi',
-      original: json.results,
+      original: results,
       type: 'stock_br_batch',
-      stocks: json.results.map((stock) => ({
+      stocks: results.map((stock) => ({
         ticker: stock.symbol,
         price: stock.regularMarketPrice,
         change: stock.regularMarketChangePercent,
@@ -286,32 +290,52 @@ const US_MOCK = {
   ABNB:  { name: 'Airbnb',          price: 147.23,   change:  1.56,  cap:   94000000000 },
 };
 
+// Proxies tentados em sequência — mesma resiliência usada em MarketStatus.js
+const US_STOCK_PROXIES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+// v7/finance/quote passou a exigir autenticação (retorna "Unauthorized" mesmo via proxy) — usamos
+// o mesmo endpoint v8/finance/chart (por símbolo) que já é confiável em MarketStatus.js.
+const fetchOneUSStock = async (ticker) => {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=5m`;
+  for (const proxy of US_STOCK_PROXIES) {
+    try {
+      const res = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (!meta?.regularMarketPrice) continue;
+      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
+      const change = ((meta.regularMarketPrice - prevClose) / prevClose) * 100;
+      return {
+        ticker:    meta.symbol || ticker,
+        name:      meta.longName || meta.shortName || ticker,
+        price:     meta.regularMarketPrice,
+        change:    parseFloat(change.toFixed(2)),
+        volume:    meta.regularMarketVolume,
+        high:      meta.regularMarketDayHigh,
+        low:       meta.regularMarketDayLow,
+        prevClose,
+        w52High:   meta.fiftyTwoWeekHigh,
+        w52Low:    meta.fiftyTwoWeekLow,
+        exchange:  meta.fullExchangeName || meta.exchangeName || 'US',
+        longName:  meta.longName,
+      };
+    } catch { /* tenta o próximo proxy */ }
+  }
+  return null;
+};
+
 export const fetchUSStocks = async (tickers = []) => {
-  const symbols = tickers.join(',');
   return safeCall(async () => {
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&lang=en&region=US&corsDomain=finance.yahoo.com`;
-    const json = await fetchJson(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-    const results = json?.quoteResponse?.result;
-    if (!Array.isArray(results) || results.length === 0) throw new Error('Sem dados do Yahoo Finance');
-    return {
-      source: 'Yahoo Finance',
-      stocks: results.map(s => ({
-        ticker:    s.symbol,
-        name:      s.shortName || s.longName || s.symbol,
-        price:     s.regularMarketPrice,
-        change:    s.regularMarketChangePercent,
-        volume:    s.regularMarketVolume,
-        high:      s.regularMarketDayHigh,
-        low:       s.regularMarketDayLow,
-        open:      s.regularMarketOpen,
-        prevClose: s.regularMarketPreviousClose,
-        marketCap: s.marketCap,
-        w52High:   s.fiftyTwoWeekHigh,
-        w52Low:    s.fiftyTwoWeekLow,
-        exchange:  s.fullExchangeName || s.exchange || 'US',
-        longName:  s.longName,
-      }))
-    };
+    const results = await Promise.all(tickers.map(fetchOneUSStock));
+    const stocks = results.filter(Boolean);
+    if (stocks.length === 0) throw new Error('Sem dados do Yahoo Finance');
+    return { source: 'Yahoo Finance', stocks };
   }, () => ({
     source: 'Simulated',
     stocks: tickers.map(t => {

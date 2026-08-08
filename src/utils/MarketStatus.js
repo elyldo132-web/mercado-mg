@@ -30,23 +30,35 @@ export const fetchBTC24h = async () => {
   return { price: d.price, changePct: d.change };
 };
 
+// Proxies CORS tentados em sequência — se um estiver fora do ar, tenta o próximo antes de desistir.
+const YAHOO_PROXIES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
 // Cotação genérica via Yahoo Finance (com proxy) — usada pra WIN, S&P, Nasdaq, DXY, VIX, USD/BRL etc.
 export const fetchYahooQuote = async (symbol) => {
-  const PROXY = 'https://api.allorigins.win/raw?url=';
-  const url   = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
-  try {
-    const res  = await fetch(`${PROXY}${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
-    const json = await res.json();
-    const r    = json?.chart?.result?.[0];
-    if (!r) return null;
-    const quotes  = r.indicators.quote[0].close.filter(v => v != null);
-    const prev    = r.meta?.chartPreviousClose ?? quotes[0];
-    const current = quotes[quotes.length - 1];
-    const change  = ((current - prev) / prev) * 100;
-    return { price: current, change: parseFloat(change.toFixed(2)) };
-  } catch {
-    return null;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
+  for (const proxy of YAHOO_PROXIES) {
+    try {
+      const res  = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const r    = json?.chart?.result?.[0];
+      if (!r) continue;
+      const quotes  = r.indicators.quote[0].close.filter(v => v != null);
+      if (!quotes.length) continue;
+      const prev    = r.meta?.chartPreviousClose ?? quotes[0];
+      const current = quotes[quotes.length - 1];
+      const change  = ((current - prev) / prev) * 100;
+      return { price: current, change: parseFloat(change.toFixed(2)) };
+    } catch {
+      // tenta o próximo proxy
+    }
   }
+  return null;
 };
 
 // Futuros do S&P 500 (ES=F) via Yahoo Finance — mantido por compatibilidade
