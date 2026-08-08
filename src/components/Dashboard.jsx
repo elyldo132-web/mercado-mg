@@ -560,6 +560,7 @@ const Dashboard = ({ onLogout }) => {
         sentiment: Math.floor(newSentiment),
         win: updatedWin,
         dolar: updatedDolar,
+        btc: last.btc, // herda o BTC atual — sem isso o ponto novo ficava sem valor até o próximo poll real
         activeAssetVal: parseFloat(newActiveVal.toFixed(2)),
         winSignal,
         dolarSignal,
