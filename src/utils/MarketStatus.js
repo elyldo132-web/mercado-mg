@@ -56,7 +56,7 @@ export const fetchYahooQuote = async (symbol) => {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
   for (const proxy of YAHOO_PROXIES) {
     try {
-      const res  = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+      const res  = await fetch(proxy(url), { signal: AbortSignal.timeout(5000) });
       if (!res.ok) continue;
       const json = await res.json();
       const r    = json?.chart?.result?.[0];

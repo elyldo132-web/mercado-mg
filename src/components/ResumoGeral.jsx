@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { fetchYahooQuote, fetchBinance24h } from '../utils/MarketStatus';
+import { fetchYahooQuote, fetchBinance24h, fetchUsdBrl } from '../utils/MarketStatus';
 
 const SCORE_HISTORY_KEY  = 'mercadomg_macro_history_v1';
 const REGIME_HISTORY_KEY = 'mercadomg_regime_history_v1';
@@ -44,7 +44,7 @@ const relTime = (ts) => {
 
 const ASSET_DEFS = [
   { key: 'win',    label: 'WIN Mini',       icon: '🇧🇷', symbol: '^BVSP',    source: 'yahoo',   fmt: (n) => Math.round(n).toLocaleString('pt-BR') },
-  { key: 'usdbrl', label: 'Dólar (USD/BRL)', icon: '💵', symbol: 'USDBRL=X', source: 'yahoo',   fmt: (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) },
+  { key: 'usdbrl', label: 'Dólar (USD/BRL)', icon: '💵', symbol: null, source: 'erapi', fmt: (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) },
   { key: 'sp500',  label: 'S&P 500',        icon: '🇺🇸', symbol: 'ES=F',     source: 'yahoo',   fmt: (n) => n.toLocaleString('en-US', { maximumFractionDigits: 2 }) },
   { key: 'nasdaq', label: 'Nasdaq',         icon: '💻', symbol: 'NQ=F',     source: 'yahoo',   fmt: (n) => n.toLocaleString('en-US', { maximumFractionDigits: 2 }) },
   { key: 'dxy',    label: 'DXY',            icon: '💱', symbol: 'DX=F',     source: 'yahoo',   fmt: (n) => n.toLocaleString('en-US', { maximumFractionDigits: 2 }) },
@@ -154,14 +154,18 @@ const ResumoGeral = ({ globalMacro }) => {
 
   useEffect(() => {
     let alive = true;
+    // Cada ativo atualiza a tela assim que a PRÓPRIA cotação chega — sem esperar os outros 8.
+    // Antes usava Promise.allSettled (esperava todo mundo), então um símbolo lento no Yahoo
+    // (até ~30s tentando os 4 proxies) travava a tela inteira em "carregando".
     const load = () => {
-      Promise.allSettled(ASSET_DEFS.map(a => a.source === 'binance' ? fetchBinance24h(a.symbol) : fetchYahooQuote(a.symbol)))
-        .then(results => {
-          if (!alive) return;
-          const next = {};
-          results.forEach((r, i) => { next[ASSET_DEFS[i].key] = r.status === 'fulfilled' ? r.value : null; });
-          setAssetQuotes(next);
-        });
+      ASSET_DEFS.forEach(a => {
+        const fetcher = a.source === 'binance' ? fetchBinance24h(a.symbol)
+                       : a.source === 'erapi'   ? fetchUsdBrl()
+                       : fetchYahooQuote(a.symbol);
+        fetcher
+          .then(q => { if (alive) setAssetQuotes(prev => ({ ...prev, [a.key]: q ?? null })); })
+          .catch(() => { if (alive) setAssetQuotes(prev => ({ ...prev, [a.key]: null })); });
+      });
     };
     load();
     const t = setInterval(load, 120000);
@@ -260,14 +264,15 @@ const ResumoGeral = ({ globalMacro }) => {
           <div className="rg-mini-row">
             {ASSET_DEFS.map(a => {
               const q = assetQuotes[a.key];
-              const up = q && q.change >= 0;
+              const hasChange = q && typeof q.change === 'number';
+              const up = hasChange && q.change >= 0;
               return (
                 <div key={a.key} className="rg-mini-card">
                   <div className="rg-mini-label">{a.icon} {a.label}</div>
                   {q ? (
                     <>
                       <div className="rg-mini-price font-mono">{a.fmt(q.price)}</div>
-                      <div className={`rg-mini-change font-mono ${up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {Math.abs(q.change).toFixed(2)}%</div>
+                      {hasChange && <div className={`rg-mini-change font-mono ${up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {Math.abs(q.change).toFixed(2)}%</div>}
                     </>
                   ) : (
                     <div className="rg-mini-price muted">—</div>
@@ -284,6 +289,13 @@ const ResumoGeral = ({ globalMacro }) => {
                 {ASSET_DEFS.map(a => {
                   const q = assetQuotes[a.key];
                   if (!q) return <div key={a.key} className="rg-heat-cell muted">{a.label}<br />—</div>;
+                  if (typeof q.change !== 'number') {
+                    return (
+                      <div key={a.key} className="rg-heat-cell" style={{ background: 'rgba(255,255,255,.04)', color: 'var(--text-secondary)' }}>
+                        {a.label}<br />{a.fmt(q.price)}
+                      </div>
+                    );
+                  }
                   const up = q.change >= 0;
                   const intensity = Math.min(1, Math.abs(q.change) / 3);
                   const bg = up ? `rgba(74,222,128,${0.12 + intensity * 0.22})` : `rgba(255,51,85,${0.12 + intensity * 0.22})`;
