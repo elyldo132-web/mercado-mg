@@ -659,7 +659,7 @@ const Dashboard = ({ onLogout }) => {
 
   // WIN, Dólar e BTC reais — mesmas fontes já usadas no ticker superior (Yahoo/Binance).
   // Substituem a simulação: os três gráficos passam a refletir o mercado de verdade.
-  const winIsLive   = useRealPrice(() => fetchYahooQuote('^BVSP'),   { field: 'win',   setPrice: setWinPrice,   setChartData, round: Math.round });
+  useRealPrice(() => fetchYahooQuote('^BVSP'), { field: 'win', setPrice: setWinPrice, setChartData, round: Math.round });
   const dolarIsLive = useRealPrice(fetchUsdBrl, { field: 'dolar', setPrice: setDolarPrice, setChartData, round: (n) => parseFloat(n.toFixed(4)) });
   const btcIsLive   = useRealPrice(fetchBTC24h,                       { field: 'btc',   setPrice: null,          setChartData, round: Math.floor });
 
@@ -802,12 +802,10 @@ const Dashboard = ({ onLogout }) => {
           <div className="charts-view animate-fade-in" style={{ animationDuration: '0.5s' }}>
             <MarketCharts
               data={chartData}
-              currentWin={winPrice}
               currentDolar={dolarPrice}
               currentBtc={chartData[chartData.length - 1]?.btc}
               direction={macroSignal?.direction}
               cryptoDirection={cryptoDirection}
-              winIsLive={winIsLive}
               dolarIsLive={dolarIsLive}
               btcIsLive={btcIsLive}
             />

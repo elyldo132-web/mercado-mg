@@ -13,6 +13,7 @@ import {
   ComposedChart,
   Bar
 } from 'recharts';
+import TradingViewWidget from './TradingViewWidget';
 
 
 
@@ -78,13 +79,12 @@ const CustomTooltip = ({ active, payload, suffix = "" }) => {
   return null;
 };
 
-const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, cryptoDirection, winIsLive, dolarIsLive, btcIsLive }) => {
+const MarketCharts = ({ data, currentDolar, currentBtc, direction, cryptoDirection, dolarIsLive, btcIsLive }) => {
   // Cor do WIN segue o sentimento consolidado; DOL segue invertido (dólar sobe quando bolsa cai)
   const winColor = direction === 'COMPRA' ? '#00ff88' : direction === 'VENDA' ? '#ff3355' : '#00f5d4';
   const dolColor = direction === 'COMPRA' ? '#ff3355' : direction === 'VENDA' ? '#00ff88' : 'var(--accent-gold)';
 
   // Acende Compra/Venda na legenda conforme o sinal direcional atual (DOL invertido em relação ao WIN)
-  const winLit = direction === 'COMPRA' ? 'buy' : direction === 'VENDA' ? 'sell' : null;
   const dolLit = direction === 'COMPRA' ? 'sell' : direction === 'VENDA' ? 'buy' : null;
 
   // Cripto segue o sinal de risco-on/off (modo 24h) — mesmo cálculo da Diretriz do Dia
@@ -229,46 +229,15 @@ const MarketCharts = ({ data, currentWin, currentDolar, currentBtc, direction, c
       </div>
 
       <div className="secondary-charts">
-        {/* WIN CANDLESTICK CHART */}
-        <div className="sub-chart glass">
+        {/* WIN — widget oficial do TradingView (Ibovespa), carrega direto sem proxy/CORS */}
+        <div className="sub-chart glass tv-chart">
           <div className="sub-header">
             <div className="asset-info">
-              <span className="asset-name">WIN (MINI IBOV) - M5</span>
-              <span className={`live-badge ${winIsLive ? 'live' : 'stale'}`}>
-                {winIsLive ? '● AO VIVO' : '⚠ SEM COTAÇÃO REAL'}
-              </span>
-              <span className={`asset-change font-mono ${calculateChange('win') >= 0 ? 'text-green' : 'text-red'}`}>
-                {calculateChange('win')}%
-              </span>
+              <span className="asset-name">WIN (Ibovespa) — TradingView</span>
             </div>
-            <div className="asset-price font-mono">{currentWin?.toLocaleString('pt-BR')}</div>
           </div>
           <div className="sub-body">
-            <ResponsiveContainer width="100%" height={120}>
-              <ComposedChart data={processedData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'rgba(255,255,255,.4)' }} axisLine={{ stroke: 'rgba(255,255,255,.15)', strokeDasharray: '3 3' }} tickLine={false} />
-                <YAxis domain={['auto', 'auto']} hide />
-                <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                <Area
-                  type="monotone"
-                  dataKey="win"
-                  stroke={winColor}
-                  fillOpacity={0.1}
-                  fill={winColor}
-                  strokeWidth={2}
-                  dot={<SignalDot signalType="winSignal" />}
-                  isAnimationActive={false}
-                />
-                <Line type="monotone" dataKey="win_ema" stroke={winColor} strokeOpacity={0.4} strokeWidth={1} dot={false} strokeDasharray="3 3" isAnimationActive={false} />
-                <Line type="monotone" dataKey="win_vwap" stroke="#f15bb5" strokeWidth={1.5} dot={false} strokeOpacity={0.7} isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-            <div className="indicator-legend">
-              <span className="leg-item"><span className="dot ema"></span> EMA 5</span>
-              <span className="leg-item"><span className="dot vwap"></span> VWAP</span>
-              <span className={`leg-item signal-leg ${winLit === 'buy' ? 'lit' : ''}`}>▲ Compra</span>
-              <span className={`leg-item signal-leg sell ${winLit === 'sell' ? 'lit' : ''}`}>▼ Venda</span>
-            </div>
+            <TradingViewWidget symbol="BMFBOVESPA:IBOV" height={320} />
           </div>
         </div>
 
