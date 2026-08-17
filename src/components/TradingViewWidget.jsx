@@ -31,6 +31,7 @@ const TradingViewWidget = ({ symbol = 'BMFBOVESPA:IBOV', height = 320 }) => {
       locale: 'br',
       backgroundColor: 'rgba(10, 13, 20, 1)',
       enable_publishing: false,
+      allow_symbol_change: true,
       hide_top_toolbar: false,
       hide_legend: false,
       save_image: false,
