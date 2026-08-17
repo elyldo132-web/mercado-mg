@@ -234,6 +234,9 @@ const MarketCharts = ({ data, currentDolar, currentBtc, direction, cryptoDirecti
           <div className="sub-header">
             <div className="asset-info">
               <span className="asset-name">WIN (Ibovespa) — TradingView</span>
+              <span className="signal-badge" style={{ color: winColor, borderColor: winColor + '55', background: winColor + '15' }}>
+                {direction === 'COMPRA' ? '▲ COMPRA' : direction === 'VENDA' ? '▼ VENDA' : '● AGUARDAR'}
+              </span>
             </div>
           </div>
           <div className="sub-body">
@@ -420,6 +423,17 @@ const MarketCharts = ({ data, currentDolar, currentBtc, direction, cryptoDirecti
         }
         .live-badge.live { color: #00ff88; }
         .live-badge.stale { color: #fbbf24; }
+
+        .signal-badge {
+          font-size: 0.58rem;
+          font-weight: 800;
+          letter-spacing: 0.03em;
+          margin-top: 4px;
+          width: fit-content;
+          padding: 2px 8px;
+          border-radius: 6px;
+          border: 1px solid;
+        }
 
         .asset-price {
           font-size: 1.25rem;
