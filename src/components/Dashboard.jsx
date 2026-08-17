@@ -21,7 +21,7 @@ import { analyzeNews } from '../utils/MacroRules';
 import { startNewsFeed } from '../utils/NewsFetcher';
 import { fetchExchangeRates, fetchBitcoinPrice } from '../data/connectors';
 import { scanRealOpportunities } from '../utils/OpportunityScan';
-import { fetchBTC24h, fetchSPFutures, fetchYahooQuote, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
+import { fetchBTC24h, fetchSPFutures, fetchYahooQuote, fetchUsdBrl, computeCryptoScore, toCryptoDir } from '../utils/MarketStatus';
 import { computeMacroScore } from '../utils/MacroScore';
 
 // ── Pesquisa de ativos para simulação ────────────────────────────────────────
@@ -660,7 +660,7 @@ const Dashboard = ({ onLogout }) => {
   // WIN, Dólar e BTC reais — mesmas fontes já usadas no ticker superior (Yahoo/Binance).
   // Substituem a simulação: os três gráficos passam a refletir o mercado de verdade.
   const winIsLive   = useRealPrice(() => fetchYahooQuote('^BVSP'),   { field: 'win',   setPrice: setWinPrice,   setChartData, round: Math.round });
-  const dolarIsLive = useRealPrice(() => fetchYahooQuote('USDBRL=X'), { field: 'dolar', setPrice: setDolarPrice, setChartData, round: (n) => parseFloat(n.toFixed(4)) });
+  const dolarIsLive = useRealPrice(fetchUsdBrl, { field: 'dolar', setPrice: setDolarPrice, setChartData, round: (n) => parseFloat(n.toFixed(4)) });
   const btcIsLive   = useRealPrice(fetchBTC24h,                       { field: 'btc',   setPrice: null,          setChartData, round: Math.floor });
 
   // Market Pulse: Pequenas oscilações para manter o dashboard "vivo"

@@ -30,6 +30,19 @@ export const fetchBTC24h = async () => {
   return { price: d.price, changePct: d.change };
 };
 
+// USD/BRL via ExchangeRate-API — sem proxy/CORS, muito mais confiável que raspar o Yahoo.
+// Não traz variação do dia (só a cotação atual), mas isso é o suficiente pro gráfico do Dólar.
+export const fetchUsdBrl = async () => {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    const json = await res.json();
+    if (json.result !== 'success' || !json.rates?.BRL) return null;
+    return { price: json.rates.BRL };
+  } catch {
+    return null;
+  }
+};
+
 // Proxies CORS tentados em sequência — se um estiver fora do ar, tenta o próximo antes de desistir.
 const YAHOO_PROXIES = [
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
